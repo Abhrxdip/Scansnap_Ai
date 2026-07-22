@@ -1,0 +1,38 @@
+# AI & Training Artifacts
+AI/.venv/
+AI/runs/
+AI/models/
+AI/datasets/
+AI/dataset/**/images/
+runs/
+
+# Gradle & Build
+.gradle/
+**/build/
+**/.gradle/
+**/local.properties
+
+# Python
+**/__pycache__/
+*.py[cod]
+
+# IDE
+.vscode/
+.idea/
+
+# Credentials & Secrets (CRITICAL SECURITY)
+serviceAccountKey.json
+**/serviceAccountKey.json
+*.json
+*.pem
+*.key
+.env
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Sensitive & Backup Files
+Backup-codes-*.txt
+*.db
+make_commits.ps1
