@@ -1,3 +1,20 @@
+# Virtual Environments
+venv/
+.venv/
+**/venv/
+**/env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python & Cache
+__pycache__/
+**/*__pycache__/
+*.py[cod]
+*$py.class
+*.cache
+**/*.cache
+
 # AI & Training Artifacts
 AI/.venv/
 AI/runs/
@@ -6,33 +23,32 @@ AI/datasets/
 AI/dataset/**/images/
 runs/
 
-# Gradle & Build
+# Gradle & Android Build
 .gradle/
 **/build/
 **/.gradle/
 **/local.properties
+.cxx/
+**/captures/
 
-# Python
-**/__pycache__/
-*.py[cod]
-
-# IDE
+# IDE & OS
 .vscode/
 .idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Temporary & Reference Folders
+newfrontend/
 
 # Credentials & Secrets (CRITICAL SECURITY)
 serviceAccountKey.json
 **/serviceAccountKey.json
-*.json
 *.pem
 *.key
 .env
 
-# OS
-Thumbs.db
-.DS_Store
-
 # Sensitive & Backup Files
 Backup-codes-*.txt
 *.db
-make_commits.ps1
+make_commits.ps1

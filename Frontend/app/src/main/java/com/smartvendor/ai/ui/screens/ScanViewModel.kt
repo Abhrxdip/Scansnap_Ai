@@ -195,7 +195,7 @@ class ScanViewModel(
                         val matched = matchOcrProduct(ocrResult)
                         if (!matched) {
                             // Step B: YOLO Multi-Object Visual Fallback
-                            val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.65f)
+                            val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.35f)
                             if (result != null && result.detections.isNotEmpty()) {
                                 _uiState.update { it.copy(consecutiveFailedDetections = 0) }
                                 handleYoloMultiDetected(result.detections)
@@ -208,7 +208,7 @@ class ScanViewModel(
                 onNotFound = {
                     // Step B: YOLO Multi-Object Visual Fallback
                     viewModelScope.launch {
-                        val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.65f)
+                        val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.35f)
                         if (result != null && result.detections.isNotEmpty()) {
                             _uiState.update { it.copy(consecutiveFailedDetections = 0) }
                             handleYoloMultiDetected(result.detections)
@@ -219,7 +219,7 @@ class ScanViewModel(
                 },
                 onError = {
                     viewModelScope.launch {
-                        val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.65f)
+                        val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.35f)
                         if (result != null && result.detections.isNotEmpty()) {
                             _uiState.update { it.copy(consecutiveFailedDetections = 0) }
                             handleYoloMultiDetected(result.detections)

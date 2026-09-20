@@ -1,6 +1,8 @@
 package com.smartvendor.ai.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,12 +13,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.smartvendor.ai.ui.theme.AccentGreen
-import com.smartvendor.ai.ui.theme.BluePrimary
+import com.smartvendor.ai.ui.components.NeuBadge
+import com.smartvendor.ai.ui.components.NeuButton
+import com.smartvendor.ai.ui.components.NeuCard
+import com.smartvendor.ai.ui.components.neuShadow
+import com.smartvendor.ai.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,82 +30,104 @@ fun CheckoutSuccessScreen(
     billId: String,
     onNavigateHome: () -> Unit
 ) {
-    Scaffold { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NeuBackground)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            // Success Icon Bubble
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .neuShadow(4.dp, 4.dp, NeuBlack, 45.dp)
+                    .clip(CircleShape)
+                    .background(NeuGreen)
+                    .border(BorderStroke(3.dp, NeuBlack), CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(96.dp)
-                        .background(AccentGreen.copy(alpha = 0.15f), shape = CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "Success",
-                        tint = AccentGreen,
-                        modifier = Modifier.size(54.dp)
-                    )
-                }
-
-                Text(
-                    text = "Bill Generated Successfully!",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = "Success",
+                    tint = NeuBlack,
+                    modifier = Modifier.size(50.dp)
                 )
+            }
 
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "Invoice Reference",
-                            style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
-                        )
-                        Text(
-                            text = billId,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = BluePrimary
-                            )
-                        )
-                    }
-                }
+            Text(
+                text = "Bill Generated\nSuccessfully!",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black,
+                color = NeuBlack,
+                textAlign = TextAlign.Center,
+                lineHeight = 34.sp
+            )
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedButton(
-                    onClick = { /* Share invoice PDF placeholder */ },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Outlined.Share, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Share Digital Receipt")
-                }
-
-                Button(
-                    onClick = onNavigateHome,
+            NeuCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = NeuSurface,
+                shadowOffset = 5.dp,
+                cornerRadius = 18.dp
+            ) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp)
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Return to Dashboard", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "INVOICE REFERENCE",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 12.sp,
+                        color = NeuGray
+                    )
+                    NeuBadge(
+                        text = billId,
+                        backgroundColor = NeuYellow,
+                        textColor = NeuBlack,
+                        shadowOffset = 2.dp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "The transaction has been recorded in your local database and the inventory updated.",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = NeuGray,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            NeuButton(
+                text = "📤 Share Digital Receipt",
+                onClick = { /* Share receipt action */ },
+                backgroundColor = NeuYellow,
+                textColor = NeuBlack,
+                modifier = Modifier.fillMaxWidth(),
+                shadowOffset = 3.dp,
+                cornerRadius = 12.dp
+            )
+
+            NeuButton(
+                text = "Return to Dashboard →",
+                onClick = onNavigateHome,
+                backgroundColor = NeuBlue,
+                textColor = NeuWhite,
+                modifier = Modifier.fillMaxWidth(),
+                shadowOffset = 4.dp,
+                cornerRadius = 12.dp
+            )
         }
     }
 }

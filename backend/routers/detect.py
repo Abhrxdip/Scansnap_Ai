@@ -128,7 +128,7 @@ def _verify_color_signature(crop_img: Image.Image, label: str) -> bool:
         return True
 
 
-def _run_inference(img: Image.Image, conf_threshold: float = 0.65) -> DetectResponse:
+def _run_inference(img: Image.Image, conf_threshold: float = 0.35) -> DetectResponse:
     model = _get_model()
     rgb_img = img.convert("RGB")
     w, h = rgb_img.size
@@ -151,12 +151,16 @@ def _run_inference(img: Image.Image, conf_threshold: float = 0.65) -> DetectResp
             conf = float(box.conf[0])
             x1, y1, x2, y2 = box.xyxy[0].tolist()
 
-            # Fast Color Signature Guard (<0.5ms)
-            crop_box = (max(0, int(x1)), max(0, int(y1)), min(w, int(x2)), min(h, int(y2)))
-            crop = rgb_img.crop(crop_box)
-            if not _verify_color_signature(crop, label):
-                logger.info(f"[Color Guard] Rejected false positive: {label} ({conf*100:.1f}%) on non-matching package color")
-                continue
+            logger.info(f"🎯 [YOLO Model Box] Found {label} ({conf*100:.1f}%)")
+            print(f"🎯 [YOLO Model Box] Found {label} ({conf*100:.1f}%)")
+
+            # Fast Color Signature Guard (<0.5ms) - only run on borderline detections (<0.60)
+            if conf < 0.60:
+                crop_box = (max(0, int(x1)), max(0, int(y1)), min(w, int(x2)), min(h, int(y2)))
+                crop = rgb_img.crop(crop_box)
+                if not _verify_color_signature(crop, label):
+                    logger.info(f"[Color Guard] Rejected: {label} ({conf*100:.1f}%) on non-matching package color")
+                    continue
 
             # normalise [0..1]
             detections.append(Detection(
@@ -212,7 +216,7 @@ async def detect_from_base64(payload: dict):
     """
     try:
         b64 = payload.get("image", "")
-        conf = float(payload.get("conf", 0.65))
+        conf = float(payload.get("conf", 0.35))
         img_bytes = base64.b64decode(b64)
         img = Image.open(io.BytesIO(img_bytes))
         return _run_inference(img, conf_threshold=conf)

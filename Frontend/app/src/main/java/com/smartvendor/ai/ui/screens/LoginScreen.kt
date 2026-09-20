@@ -4,7 +4,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,8 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -33,7 +35,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smartvendor.ai.R
-import com.smartvendor.ai.ui.theme.BluePrimary
+import com.smartvendor.ai.ui.components.NeuBadge
+import com.smartvendor.ai.ui.components.NeuButton
+import com.smartvendor.ai.ui.components.NeuCard
+import com.smartvendor.ai.ui.components.neuShadow
+import com.smartvendor.ai.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,118 +54,125 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color(0xFF1565C0), Color(0xFF1E88E5), Color(0xFF42A5F5))
-                )
-            )
+            .background(NeuBackground)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .statusBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header
-            Spacer(modifier = Modifier.height(60.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Brand Badge
+            NeuBadge(
+                text = "⚡ NEXT-GEN AI POS",
+                backgroundColor = NeuYellow,
+                textColor = NeuBlack,
+                shadowOffset = 2.dp
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             Text(
                 text = "SmartVendor AI",
-                fontSize = 34.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color.White
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Black,
+                color = NeuBlack
             )
             Text(
                 text = stringResource(id = R.string.tagline),
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = NeuGray,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
-            Spacer(modifier = Modifier.height(36.dp))
 
-            // Card
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 24.dp, bottomEnd = 24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Main Neubrutalist Card
+            NeuCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = NeuSurface,
+                shadowOffset = 6.dp,
+                cornerRadius = 20.dp
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 28.dp),
+                        .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-
-                    // Tab Row: Login / Register
-                    TabRow(
-                        selectedTabIndex = if (uiState.authMode == AuthMode.LOGIN) 0 else 1,
-                        containerColor = Color(0xFFF0F4FF),
-                        contentColor = BluePrimary,
-                        indicator = {},
-                        divider = {}
+                    // Tab Selector: Login / Register
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Tab(
-                            selected = uiState.authMode == AuthMode.LOGIN,
-                            onClick = { viewModel.setAuthMode(AuthMode.LOGIN) },
+                        Box(
                             modifier = Modifier
-                                .padding(4.dp)
-                                .background(
-                                    color = if (uiState.authMode == AuthMode.LOGIN) BluePrimary else Color.Transparent,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
+                                .weight(1f)
+                                .neuShadow(2.dp, 2.dp, NeuBlack, 10.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (uiState.authMode == AuthMode.LOGIN) NeuYellow else NeuSurface)
+                                .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp))
+                                .clickable { viewModel.setAuthMode(AuthMode.LOGIN) }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "Login",
-                                modifier = Modifier.padding(vertical = 10.dp),
-                                fontWeight = FontWeight.Bold,
-                                color = if (uiState.authMode == AuthMode.LOGIN) Color.White else Color.Gray
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp,
+                                color = NeuBlack
                             )
                         }
-                        Tab(
-                            selected = uiState.authMode == AuthMode.REGISTER,
-                            onClick = { viewModel.setAuthMode(AuthMode.REGISTER) },
+
+                        Box(
                             modifier = Modifier
-                                .padding(4.dp)
-                                .background(
-                                    color = if (uiState.authMode == AuthMode.REGISTER) BluePrimary else Color.Transparent,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
+                                .weight(1f)
+                                .neuShadow(2.dp, 2.dp, NeuBlack, 10.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (uiState.authMode == AuthMode.REGISTER) NeuBlue else NeuSurface)
+                                .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp))
+                                .clickable { viewModel.setAuthMode(AuthMode.REGISTER) }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "Register",
-                                modifier = Modifier.padding(vertical = 10.dp),
-                                fontWeight = FontWeight.Bold,
-                                color = if (uiState.authMode == AuthMode.REGISTER) Color.White else Color.Gray
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp,
+                                color = if (uiState.authMode == AuthMode.REGISTER) NeuWhite else NeuBlack
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     AnimatedContent(
                         targetState = uiState.authMode,
                         transitionSpec = { fadeIn() togetherWith fadeOut() },
                         label = "AuthModeSwitch"
                     ) { mode ->
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
                             // Name field (Register only)
                             if (mode == AuthMode.REGISTER) {
                                 OutlinedTextField(
                                     value = uiState.nameInput,
                                     onValueChange = { viewModel.onNameChanged(it) },
-                                    label = { Text("Full Name / Store Name") },
-                                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                                    label = { Text("Store / Full Name", fontWeight = FontWeight.Bold) },
+                                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = NeuBlack) },
                                     singleLine = true,
                                     keyboardOptions = KeyboardOptions(
                                         keyboardType = KeyboardType.Text,
                                         imeAction = ImeAction.Next
                                     ),
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(14.dp)
+                                    shape = RoundedCornerShape(10.dp)
                                 )
                             }
 
@@ -167,28 +180,29 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = uiState.emailInput,
                                 onValueChange = { viewModel.onEmailChanged(it) },
-                                label = { Text("Email Address") },
-                                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                                label = { Text("Email Address", fontWeight = FontWeight.Bold) },
+                                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = NeuBlack) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(
                                     keyboardType = KeyboardType.Email,
                                     imeAction = ImeAction.Next
                                 ),
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(14.dp)
+                                shape = RoundedCornerShape(10.dp)
                             )
 
                             // Password
                             OutlinedTextField(
                                 value = uiState.passwordInput,
                                 onValueChange = { viewModel.onPasswordChanged(it) },
-                                label = { Text("Password") },
-                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                                label = { Text("Password", fontWeight = FontWeight.Bold) },
+                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = NeuBlack) },
                                 trailingIcon = {
                                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                         Icon(
                                             imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                            contentDescription = null
+                                            contentDescription = null,
+                                            tint = NeuBlack
                                         )
                                     }
                                 },
@@ -199,7 +213,7 @@ fun LoginScreen(
                                     imeAction = if (mode == AuthMode.REGISTER) ImeAction.Next else ImeAction.Done
                                 ),
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(14.dp)
+                                shape = RoundedCornerShape(10.dp)
                             )
 
                             // Confirm Password (Register only)
@@ -207,13 +221,14 @@ fun LoginScreen(
                                 OutlinedTextField(
                                     value = uiState.confirmPasswordInput,
                                     onValueChange = { viewModel.onConfirmPasswordChanged(it) },
-                                    label = { Text("Confirm Password") },
-                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                                    label = { Text("Confirm Password", fontWeight = FontWeight.Bold) },
+                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = NeuBlack) },
                                     trailingIcon = {
                                         IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                                             Icon(
                                                 imageVector = if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                                contentDescription = null
+                                                contentDescription = null,
+                                                tint = NeuBlack
                                             )
                                         }
                                     },
@@ -224,7 +239,7 @@ fun LoginScreen(
                                         imeAction = ImeAction.Done
                                     ),
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(14.dp)
+                                    shape = RoundedCornerShape(10.dp)
                                 )
                             }
 
@@ -234,14 +249,23 @@ fun LoginScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.End
                                 ) {
-                                    TextButton(onClick = { viewModel.openForgotPasswordDialog() }) {
-                                        Text("Forgot Password?", color = BluePrimary, fontSize = 13.sp)
-                                    }
+                                    Text(
+                                        text = "Forgot Password?",
+                                        color = NeuBlue,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier
+                                            .clickable { viewModel.openForgotPasswordDialog() }
+                                            .padding(4.dp)
+                                    )
                                 }
                             }
 
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             // Primary CTA Button
-                            Button(
+                            NeuButton(
+                                text = if (uiState.isLoading) "Processing..." else if (mode == AuthMode.LOGIN) "Login →" else "Create Account →",
                                 onClick = {
                                     if (mode == AuthMode.LOGIN) {
                                         viewModel.performLogin(onLoginSuccess)
@@ -250,31 +274,21 @@ fun LoginScreen(
                                     }
                                 },
                                 enabled = !uiState.isLoading,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(54.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
-                            ) {
-                                if (uiState.isLoading) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                                } else {
-                                    Text(
-                                        text = if (mode == AuthMode.LOGIN) "Login" else "Create Account",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
+                                backgroundColor = if (mode == AuthMode.LOGIN) NeuBlue else NeuGreen,
+                                textColor = if (mode == AuthMode.LOGIN) NeuWhite else NeuBlack,
+                                modifier = Modifier.fillMaxWidth(),
+                                shadowOffset = 4.dp,
+                                cornerRadius = 12.dp
+                            )
                         }
                     }
 
-                    // Error Snackbar inline
+                    // Error Notification inline
                     if (uiState.errorMessage != null) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                            shape = RoundedCornerShape(12.dp)
+                        NeuCard(
+                            backgroundColor = NeuRed,
+                            shadowOffset = 3.dp,
+                            cornerRadius = 10.dp
                         ) {
                             Row(
                                 modifier = Modifier
@@ -285,19 +299,26 @@ fun LoginScreen(
                             ) {
                                 Text(
                                     text = uiState.errorMessage!!,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    color = NeuWhite,
+                                    fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     modifier = Modifier.weight(1f)
                                 )
-                                TextButton(onClick = { viewModel.clearError() }) {
-                                    Text("✕", color = MaterialTheme.colorScheme.onErrorContainer)
-                                }
+                                Text(
+                                    text = "✕",
+                                    color = NeuWhite,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 16.sp,
+                                    modifier = Modifier
+                                        .clickable { viewModel.clearError() }
+                                        .padding(4.dp)
+                                )
                             }
                         }
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 
@@ -320,29 +341,57 @@ fun ForgotPasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Reset Password", fontWeight = FontWeight.Bold) },
+        containerColor = NeuSurface,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .border(BorderStroke(3.dp, NeuBlack), RoundedCornerShape(16.dp))
+            .neuShadow(6.dp, 6.dp, NeuBlack, 16.dp),
+        title = {
+            Text(
+                text = "Reset Password",
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp,
+                color = NeuBlack
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Enter your email address to receive a password reset link.")
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Enter your email address to receive a password reset link.",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    color = NeuGray
+                )
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text("Email Address") },
-                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                    label = { Text("Email Address", fontWeight = FontWeight.Bold) },
+                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = NeuBlack) },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onSend(email) }) {
-                Text("Send Reset Link")
-            }
+            NeuButton(
+                text = "Send Link",
+                onClick = { onSend(email) },
+                backgroundColor = NeuBlue,
+                textColor = NeuWhite,
+                shadowOffset = 2.dp,
+                cornerRadius = 8.dp
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
+            NeuButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                backgroundColor = NeuSurface,
+                textColor = NeuBlack,
+                shadowOffset = 2.dp,
+                cornerRadius = 8.dp
+            )
         }
     )
 }

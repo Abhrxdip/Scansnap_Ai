@@ -1,10 +1,11 @@
 package com.smartvendor.ai.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -15,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -25,7 +27,11 @@ import com.smartvendor.ai.repository.AuthRepository
 import com.smartvendor.ai.repository.AuthRepositoryImpl
 import com.smartvendor.ai.repository.StoreRepository
 import com.smartvendor.ai.repository.StoreRepositoryImpl
-import com.smartvendor.ai.ui.theme.BluePrimary
+import com.smartvendor.ai.ui.components.NeuBadge
+import com.smartvendor.ai.ui.components.NeuButton
+import com.smartvendor.ai.ui.components.NeuCard
+import com.smartvendor.ai.ui.components.neuShadow
+import com.smartvendor.ai.ui.theme.*
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,131 +50,180 @@ fun SettingsScreen(
     var showStoreInfoDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
 
-    // Dynamic Store Name (uses registered User Name if Store Name is not set)
-    val displayStoreName = storeInfo.name.ifBlank { currentUser?.name ?: "My Store" }
-    val displayAddress = storeInfo.address.ifBlank { "Tap to set store address" }
-    val displayGst = if (storeInfo.gst.isNotBlank()) "GST: ${storeInfo.gst}" else "GST: Not Specified"
+    val displayStoreName = storeInfo.name.ifBlank { currentUser?.name ?: "Om Sai Kirana Store" }
+    val displayAddress = storeInfo.address.ifBlank { "Tap to configure store address" }
+    val displayGst = if (storeInfo.gst.isNotBlank()) "GST: ${storeInfo.gst}" else "GST: Unregistered"
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Settings & Store Profile", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NeuSurface)
+                    .border(BorderStroke(2.5.dp, NeuBlack))
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(NeuSurface)
+                                .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                                .clickable { onNavigateBack() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = NeuBlack,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Settings & Store",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp,
+                                color = NeuBlack
+                            )
+                            Text(
+                                text = "POS & Business Configuration",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = NeuGray
+                            )
+                        }
                     }
+
+                    NeuBadge(
+                        text = "TERMINAL",
+                        backgroundColor = NeuCyan,
+                        textColor = NeuBlack
+                    )
                 }
-            )
-        }
+            }
+        },
+        containerColor = NeuBackground
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(20.dp),
+                .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Dynamic Store Profile Card
-            Card(
+            // Store Profile Hero Card in NeuCard
+            NeuCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { showStoreInfoDialog = true },
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                backgroundColor = NeuSurface,
+                shadowOffset = 4.dp,
+                cornerRadius = 14.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(54.dp)
-                            .background(BluePrimary, CircleShape),
+                            .size(50.dp)
+                            .neuShadow(2.dp, 2.dp, NeuBlack, 10.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(NeuYellow)
+                            .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Outlined.Store, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+                        Text(text = "🏪", fontSize = 24.sp)
                     }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = displayStoreName,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            fontWeight = FontWeight.Black,
+                            fontSize = 17.sp,
+                            color = NeuBlack
                         )
                         Text(
                             text = displayAddress,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = if (storeInfo.address.isNotBlank()) BluePrimary else Color.Gray
-                            )
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = NeuBlue,
+                            maxLines = 1
                         )
                         Text(
-                            text = "$displayGst  |  Role: Admin",
-                            style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                            text = "$displayGst  •  UPI: ${storeInfo.upi.ifBlank { "Not set" }}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = NeuGray,
+                            maxLines = 1
                         )
                     }
                 }
             }
 
-            Text("Preferences", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            Text(
+                text = "STORE PREFERENCES",
+                fontWeight = FontWeight.Black,
+                fontSize = 12.sp,
+                color = NeuBlack,
+                letterSpacing = 0.5.sp
+            )
 
             SettingsItemRow(
                 icon = Icons.Outlined.Storefront,
-                title = "Edit Store Profile & Address",
-                subtitle = "Set your store address, phone, GST, and UPI ID",
+                title = "Edit Store Profile & GST",
+                subtitle = "Store name, address, GSTIN, and UPI ID for QR bills",
+                badgeColor = NeuYellow,
                 onClick = { showStoreInfoDialog = true }
             )
 
             SettingsItemRow(
-                icon = Icons.Outlined.DarkMode,
-                title = "Dark Mode",
-                subtitle = "Toggle dark visual theme",
-                trailing = {
-                    Switch(
-                        checked = isDarkMode,
-                        onCheckedChange = { isDarkMode = it }
-                    )
-                },
-                onClick = { isDarkMode = !isDarkMode }
-            )
-
-            SettingsItemRow(
                 icon = Icons.Outlined.Sync,
-                title = "Cloud Synchronization",
-                subtitle = "FastAPI backend & SQLite active",
+                title = "FastAPI Backend Connection",
+                subtitle = "http://localhost:8000 (YOLO & Master Catalog active)",
+                badgeColor = NeuGreen,
                 onClick = { }
             )
 
             SettingsItemRow(
                 icon = Icons.Outlined.Info,
-                title = "About SmartVendor AI",
-                subtitle = "Version 1.0.0 (FastAPI & YOLO TFLite Powered)",
+                title = "About ScanSnap AI",
+                subtitle = "Edge AI Visual POS & Inventory Terminal v1.0",
+                badgeColor = NeuPurple,
                 onClick = { showAboutDialog = true }
             )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            Button(
+            NeuButton(
+                text = "🚪 Logout Store Account",
                 onClick = {
                     coroutineScope.launch {
                         authRepository.logout()
                         onLogoutSuccess()
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Logout Account", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            }
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = NeuRed,
+                textColor = Color.White
+            )
         }
 
-        // Editable Store Info Dialog
         if (showStoreInfoDialog) {
             EditStoreInfoDialog(
                 currentStore = storeInfo,
@@ -186,16 +241,98 @@ fun SettingsScreen(
         if (showAboutDialog) {
             AlertDialog(
                 onDismissRequest = { showAboutDialog = false },
-                title = { Text("About SmartVendor AI") },
+                containerColor = NeuSurface,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .border(BorderStroke(3.dp, NeuBlack), RoundedCornerShape(16.dp))
+                    .neuShadow(6.dp, 6.dp, NeuBlack, 16.dp),
+                title = {
+                    Text("About ScanSnap AI", fontWeight = FontWeight.Black, fontSize = 18.sp, color = NeuBlack)
+                },
                 text = {
-                    Text("Production-quality AI Retail Billing & Inventory App built with Jetpack Compose, CameraX, TensorFlow Lite (YOLO object detection), ML Kit Barcode Scanner, FastAPI, SQLite, and Firebase Auth.")
+                    Text(
+                        text = "Next-Gen Edge AI-Powered Smart POS, Object Detection Billing & Inventory Intelligence for Kirana Stores. Engineered with Jetpack Compose, CameraX, YOLOv11 Computer Vision, HSV Color Profiling, and FastAPI.",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                        color = NeuGray,
+                        lineHeight = 18.sp
+                    )
                 },
                 confirmButton = {
-                    Button(onClick = { showAboutDialog = false }) {
-                        Text("Close")
-                    }
+                    NeuButton(
+                        text = "Got It",
+                        onClick = { showAboutDialog = false },
+                        backgroundColor = NeuBlue,
+                        textColor = Color.White,
+                        shadowOffset = 2.dp
+                    )
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun SettingsItemRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    badgeColor: Color = NeuBlue,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit
+) {
+    NeuCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        backgroundColor = NeuSurface,
+        shadowOffset = 3.dp,
+        cornerRadius = 12.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .neuShadow(1.5.dp, 1.5.dp, NeuBlack, 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(badgeColor)
+                        .border(BorderStroke(1.8.dp, NeuBlack), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = NeuBlack, modifier = Modifier.size(20.dp))
+                }
+                Column {
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        color = NeuBlack
+                    )
+                    Text(
+                        text = subtitle,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = NeuGray
+                    )
+                }
+            }
+
+            if (trailing != null) {
+                trailing()
+            } else {
+                Text(text = "→", fontWeight = FontWeight.Black, fontSize = 16.sp, color = NeuBlack)
+            }
         }
     }
 }
@@ -215,7 +352,14 @@ fun EditStoreInfoDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Store Profile", fontWeight = FontWeight.Bold) },
+        containerColor = NeuSurface,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .border(BorderStroke(3.dp, NeuBlack), RoundedCornerShape(16.dp))
+            .neuShadow(6.dp, 6.dp, NeuBlack, 16.dp),
+        title = {
+            Text("Edit Store Profile", fontWeight = FontWeight.Black, fontSize = 18.sp, color = NeuBlack)
+        },
         text = {
             Column(
                 modifier = Modifier
@@ -226,118 +370,69 @@ fun EditStoreInfoDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Store Name") },
-                    placeholder = { Text("Enter your store name") },
+                    label = { Text("Store Name", fontWeight = FontWeight.Bold) },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = address,
                     onValueChange = { address = it },
-                    label = { Text("Store Address / Location") },
-                    placeholder = { Text("Enter full store address") },
+                    label = { Text("Store Address", fontWeight = FontWeight.Bold) },
                     singleLine = false,
-                    maxLines = 3,
-                    shape = RoundedCornerShape(12.dp),
+                    maxLines = 2,
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Phone Number") },
-                    placeholder = { Text("e.g. +91 9876543210") },
+                    label = { Text("Phone Number", fontWeight = FontWeight.Bold) },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = gst,
                     onValueChange = { gst = it },
-                    label = { Text("GSTIN Number (Optional)") },
-                    placeholder = { Text("e.g. 27AAAAA0000A1Z5") },
+                    label = { Text("GSTIN", fontWeight = FontWeight.Bold) },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = upi,
                     onValueChange = { upi = it },
-                    label = { Text("UPI Payment ID (Optional)") },
-                    placeholder = { Text("e.g. storename@upi") },
+                    label = { Text("UPI ID (For QR Payments)", fontWeight = FontWeight.Bold) },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
-            Button(
+            NeuButton(
+                text = "Save Profile",
                 onClick = {
                     onSave(
                         currentStore.copy(
                             name = name,
                             address = address,
-                            phone = phone,
                             gst = gst,
+                            phone = phone,
                             upi = upi
                         )
                     )
-                }
-            ) {
-                Text("Save Store Profile")
-            }
+                },
+                backgroundColor = NeuGreen,
+                textColor = NeuBlack,
+                shadowOffset = 2.dp
+            )
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Cancel", fontWeight = FontWeight.Bold, color = NeuBlack)
             }
         }
     )
-}
-
-@Composable
-fun SettingsItemRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    trailing: (@Composable () -> Unit)? = null,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(BluePrimary.copy(alpha = 0.12f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = BluePrimary)
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column {
-                    Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray))
-                }
-            }
-            trailing?.invoke()
-        }
-    }
 }

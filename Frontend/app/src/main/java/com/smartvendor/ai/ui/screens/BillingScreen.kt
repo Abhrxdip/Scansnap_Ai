@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
@@ -20,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -29,8 +33,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smartvendor.ai.model.Bill
 import com.smartvendor.ai.model.BillItem
-import com.smartvendor.ai.ui.theme.AccentGreen
-import com.smartvendor.ai.ui.theme.BluePrimary
+import com.smartvendor.ai.ui.components.NeuBadge
+import com.smartvendor.ai.ui.components.NeuButton
+import com.smartvendor.ai.ui.components.NeuCard
+import com.smartvendor.ai.ui.components.neuShadow
+import com.smartvendor.ai.ui.theme.*
 import com.smartvendor.ai.utils.SmsUtils
 import com.smartvendor.ai.utils.WhatsAppUtils
 
@@ -53,15 +60,66 @@ fun BillingScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Billing Summary", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NeuSurface)
+                    .border(BorderStroke(2.5.dp, NeuBlack))
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(NeuSurface)
+                                .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                                .clickable { onNavigateBack() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = NeuBlack,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "POS Checkout",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp,
+                                color = NeuBlack
+                            )
+                            Text(
+                                text = "Bill ID: ${billId.take(12)}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = NeuGray
+                            )
+                        }
                     }
+
+                    NeuBadge(
+                        text = "ACTIVE CART",
+                        backgroundColor = NeuYellow,
+                        textColor = NeuBlack
+                    )
                 }
-            )
-        }
+            }
+        },
+        containerColor = NeuBackground
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -71,18 +129,18 @@ fun BillingScreen(
             val bill = uiState.bill
 
             if (uiState.checkoutSuccess && bill != null) {
-                // Checkout Success View with 3 Clear Post-Checkout Options
+                // Checkout Success View
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    NeuCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        backgroundColor = NeuSurface,
+                        shadowOffset = 6.dp,
+                        cornerRadius = 16.dp
                     ) {
                         Column(
                             modifier = Modifier
@@ -91,65 +149,55 @@ fun BillingScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.CheckCircle,
-                                contentDescription = "Success",
-                                modifier = Modifier.size(72.dp),
-                                tint = AccentGreen
+                            NeuBadge(
+                                text = "✓ TRANSACTION COMPLETED",
+                                backgroundColor = NeuGreen,
+                                textColor = NeuBlack,
+                                shadowOffset = 2.dp
                             )
 
                             Text(
                                 text = "Checkout Successful!",
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+                                fontWeight = FontWeight.Black,
+                                fontSize = 24.sp,
+                                color = NeuBlack
                             )
 
                             Text(
-                                text = "Bill Total: ₹${"%.2f".format(bill.grandTotal)}  •  ${bill.paymentMethod}",
-                                style = MaterialTheme.typography.titleMedium.copy(color = BluePrimary, fontWeight = FontWeight.Bold)
+                                text = "Total Billed: ₹${"%.2f".format(bill.grandTotal)}  •  ${bill.paymentMethod.uppercase()}",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 16.sp,
+                                color = NeuBlue
                             )
 
                             Spacer(modifier = Modifier.height(4.dp))
 
                             // 1. Send Digital Receipt
-                            Button(
+                            NeuButton(
+                                text = "📱 Send Digital Receipt",
                                 onClick = { showDigitalReceiptDialog = true },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
-                            ) {
-                                Icon(Icons.Default.Send, contentDescription = null, tint = Color.White)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Send Digital Receipt 📱", fontWeight = FontWeight.Bold, color = Color.White)
-                            }
+                                modifier = Modifier.fillMaxWidth(),
+                                backgroundColor = NeuBlue,
+                                textColor = Color.White
+                            )
 
-                            // 2. Scan New Bill (Directly opens Camera Scanner for Next Customer)
-                            Button(
+                            // 2. Scan New Bill
+                            NeuButton(
+                                text = "⚡ Scan Next Customer",
                                 onClick = onStartNewBill,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)
-                            ) {
-                                Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = Color.White)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Scan New Bill 📷", fontWeight = FontWeight.Bold, color = Color.White)
-                            }
+                                modifier = Modifier.fillMaxWidth(),
+                                backgroundColor = NeuGreen,
+                                textColor = NeuBlack
+                            )
 
                             // 3. Return to Dashboard
-                            OutlinedButton(
+                            NeuButton(
+                                text = "🏠 Return to Dashboard",
                                 onClick = onNavigateToDashboard,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Icon(Icons.Default.Home, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Return to Dashboard 🏠", fontWeight = FontWeight.Bold)
-                            }
+                                modifier = Modifier.fillMaxWidth(),
+                                backgroundColor = NeuSurface,
+                                textColor = NeuBlack
+                            )
                         }
                     }
                 }
@@ -158,7 +206,7 @@ fun BillingScreen(
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(bill.items, key = { it.productId }) { item ->
@@ -181,9 +229,7 @@ fun BillingScreen(
                         isProcessing = uiState.isProcessingCheckout,
                         onPaymentMethodSelect = { viewModel.setPaymentMethod(it) },
                         onCheckout = {
-                            viewModel.performCheckout {
-                                // Checkout completes, presenting option to share digital receipt
-                            }
+                            viewModel.performCheckout {}
                         }
                     )
                 }
@@ -192,26 +238,36 @@ fun BillingScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Outlined.Payments,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Current Bill is Empty",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Scan products from live camera feed to add items.",
-                            color = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(onClick = onNavigateBack) {
-                            Text("Back to Scanner")
+                    NeuCard(
+                        modifier = Modifier.padding(24.dp),
+                        backgroundColor = NeuSurface,
+                        shadowOffset = 4.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(text = "🛒", fontSize = 48.sp)
+                            Text(
+                                text = "Current Bill is Empty",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp,
+                                color = NeuBlack
+                            )
+                            Text(
+                                text = "Point camera or use barcode scanner to add products.",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = NeuGray
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            NeuButton(
+                                text = "⚡ Open AI Scanner",
+                                onClick = onNavigateBack,
+                                backgroundColor = NeuBlue,
+                                textColor = Color.White
+                            )
                         }
                     }
                 }
@@ -237,13 +293,15 @@ fun BillingScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(16.dp),
+                    containerColor = NeuRed,
+                    contentColor = Color.White,
                     action = {
                         TextButton(onClick = { viewModel.clearError() }) {
-                            Text("DISMISS", color = Color.White)
+                            Text("DISMISS", color = Color.White, fontWeight = FontWeight.Black)
                         }
                     }
                 ) {
-                    Text(uiState.errorMessage!!)
+                    Text(uiState.errorMessage!!, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -257,11 +315,11 @@ fun BillItemRow(
     onDecrease: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
+    NeuCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        backgroundColor = NeuSurface,
+        shadowOffset = 3.dp,
+        cornerRadius = 12.dp
     ) {
         Row(
             modifier = Modifier
@@ -273,12 +331,16 @@ fun BillItemRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.name,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    fontWeight = FontWeight.Black,
+                    fontSize = 15.sp,
+                    color = NeuBlack
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "₹${"%.2f".format(item.unitPrice)}  |  GST: ${item.gst}%",
-                    style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                    text = "₹${"%.2f".format(item.unitPrice)} each  •  GST ${item.gst}%",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = NeuGray
                 )
             }
 
@@ -286,41 +348,59 @@ fun BillItemRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                IconButton(
-                    onClick = onDecrease,
+                Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                        .size(28.dp)
+                        .neuShadow(1.5.dp, 1.5.dp, NeuBlack, 6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(NeuSurface)
+                        .border(BorderStroke(1.8.dp, NeuBlack), RoundedCornerShape(6.dp))
+                        .clickable { onDecrease() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Remove, contentDescription = "Minus", modifier = Modifier.size(18.dp))
+                    Text(text = "−", fontWeight = FontWeight.Black, fontSize = 16.sp, color = NeuBlack)
                 }
 
                 Text(
                     text = "${item.quantity}",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp,
+                    color = NeuBlack
                 )
 
-                IconButton(
-                    onClick = onIncrease,
+                Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                        .size(28.dp)
+                        .neuShadow(1.5.dp, 1.5.dp, NeuBlack, 6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(NeuSurface)
+                        .border(BorderStroke(1.8.dp, NeuBlack), RoundedCornerShape(6.dp))
+                        .clickable { onIncrease() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Plus", modifier = Modifier.size(18.dp))
+                    Text(text = "+", fontWeight = FontWeight.Black, fontSize = 16.sp, color = NeuBlack)
                 }
 
                 Spacer(modifier = Modifier.width(4.dp))
 
                 Text(
                     text = "₹${"%.2f".format(item.lineTotal)}",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = BluePrimary
-                    )
+                    fontWeight = FontWeight.Black,
+                    fontSize = 15.sp,
+                    color = NeuBlue
                 )
 
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = Color.Red)
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .neuShadow(1.5.dp, 1.5.dp, NeuBlack, 6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFFFE4E6))
+                        .border(BorderStroke(1.8.dp, NeuBlack), RoundedCornerShape(6.dp))
+                        .clickable { onDelete() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = NeuRed, modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -338,85 +418,103 @@ fun BillingFooterCard(
     onPaymentMethodSelect: (String) -> Unit,
     onCheckout: () -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 8.dp,
-        shadowElevation = 12.dp,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(NeuSurface)
+            .border(BorderStroke(3.dp, NeuBlack))
+            .padding(18.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "Select Payment Mode",
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                text = "PAYMENT METHOD",
+                fontWeight = FontWeight.Black,
+                fontSize = 12.sp,
+                color = NeuBlack,
+                letterSpacing = 0.5.sp
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("CASH", "UPI", "CARD", "OTHER").forEach { mode ->
-                    val isSelected = selectedPaymentMethod == mode
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onPaymentMethodSelect(mode) },
-                        label = { Text(mode) },
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = BluePrimary,
-                            selectedLabelColor = Color.White
+                listOf("CASH", "UPI", "CARD").forEach { mode ->
+                    val isSelected = selectedPaymentMethod.equals(mode, ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .neuShadow(
+                                offsetX = if (isSelected) 3.dp else 1.5.dp,
+                                offsetY = if (isSelected) 3.dp else 1.5.dp,
+                                cornerRadius = 8.dp
+                            )
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isSelected) {
+                                    when (mode) {
+                                        "CASH" -> NeuGreen
+                                        "UPI" -> NeuYellow
+                                        else -> NeuBlue
+                                    }
+                                } else NeuSurface
+                            )
+                            .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                            .clickable { onPaymentMethodSelect(mode) }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = mode,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp,
+                            color = if (isSelected && mode == "CARD") Color.White else NeuBlack
                         )
-                    )
+                    }
                 }
             }
 
-            HorizontalDivider()
+            HorizontalDivider(thickness = 2.dp, color = NeuBlack)
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Subtotal", color = Color.Gray)
-                Text("₹${"%.2f".format(subtotal)}")
+                Text("Subtotal", fontWeight = FontWeight.Bold, color = NeuGray, fontSize = 13.sp)
+                Text("₹${"%.2f".format(subtotal)}", fontWeight = FontWeight.Black, fontSize = 13.sp)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("GST Tax", color = Color.Gray)
-                Text("₹${"%.2f".format(gst)}")
+                Text("GST Tax", fontWeight = FontWeight.Bold, color = NeuGray, fontSize = 13.sp)
+                Text("₹${"%.2f".format(gst)}", fontWeight = FontWeight.Black, fontSize = 13.sp)
             }
             if (discount > 0) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Discount", color = AccentGreen)
-                    Text("-₹${"%.2f".format(discount)}", color = AccentGreen)
+                    Text("Discount", fontWeight = FontWeight.Bold, color = NeuGreen, fontSize = 13.sp)
+                    Text("-₹${"%.2f".format(discount)}", fontWeight = FontWeight.Black, color = NeuGreen, fontSize = 13.sp)
                 }
             }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Grand Total", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+                Text("GRAND TOTAL", fontWeight = FontWeight.Black, fontSize = 16.sp, color = NeuBlack)
                 Text(
                     text = "₹${"%.2f".format(grandTotal)}",
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = BluePrimary
-                    )
+                    fontWeight = FontWeight.Black,
+                    fontSize = 22.sp,
+                    color = NeuBlue
                 )
             }
 
-            Button(
+            NeuButton(
+                text = if (isProcessing) "Processing..." else "⚡ Complete Checkout",
                 onClick = onCheckout,
                 enabled = !isProcessing,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                if (isProcessing) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-                } else {
-                    Text("Complete Checkout", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
-            }
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = NeuBlue,
+                textColor = Color.White
+            )
         }
     }
 }
@@ -443,13 +541,15 @@ fun DigitalReceiptDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = NeuSurface,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .border(BorderStroke(3.dp, NeuBlack), RoundedCornerShape(16.dp))
+            .neuShadow(6.dp, 6.dp, NeuBlack, 16.dp),
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Default.Send, contentDescription = null, tint = BluePrimary)
-                Text("Send Digital Receipt", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = "📱", fontSize = 20.sp)
+                Text("Send Digital Receipt", fontWeight = FontWeight.Black, fontSize = 18.sp, color = NeuBlack)
             }
         },
         text = {
@@ -458,45 +558,41 @@ fun DigitalReceiptDialog(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Enter Customer Mobile Number for digital receipt delivery:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray
+                    text = "Enter customer phone number to dispatch digital bill:",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = NeuGray
                 )
 
                 OutlinedTextField(
                     value = phoneInput,
                     onValueChange = { phoneInput = it },
-                    label = { Text("Customer Mobile Number") },
+                    label = { Text("Mobile Number", fontWeight = FontWeight.Bold) },
                     placeholder = { Text("e.g. 9876543210") },
-                    leadingIcon = { Text("🇮🇳 +91 ", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold) },
+                    leadingIcon = { Text("🇮🇳 +91 ", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Black) },
                     singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 if (isLimitReached) {
-                    Surface(
-                        color = Color.Red.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    NeuCard(
+                        backgroundColor = Color(0xFFFFE4E6),
+                        shadowOffset = 2.dp,
+                        cornerRadius = 8.dp
                     ) {
                         Text(
-                            text = "⚠️ Daily free SMS limit ($dailySmsCount/${SmsUtils.DAILY_SMS_LIMIT}) reached. Please send via WhatsApp below 💬",
-                            modifier = Modifier.padding(10.dp),
-                            style = MaterialTheme.typography.labelSmall.copy(color = Color.Red, fontWeight = FontWeight.Bold)
+                            text = "⚠️ Daily free SMS limit reached. Send via WhatsApp below 💬",
+                            modifier = Modifier.padding(8.dp),
+                            fontWeight = FontWeight.Black,
+                            fontSize = 11.sp,
+                            color = NeuRed
                         )
                     }
-                } else {
-                    Text(
-                        text = "Daily Free SMS Used: $dailySmsCount / ${SmsUtils.DAILY_SMS_LIMIT}",
-                        style = MaterialTheme.typography.labelSmall.copy(color = Color.Gray, fontWeight = FontWeight.Medium)
-                    )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Option 1: Direct Silent SMS (Icon at Front)
-                Button(
+                NeuButton(
+                    text = "🚀 Send Silent SMS",
                     onClick = {
                         if (phoneInput.length >= 10) {
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
@@ -507,52 +603,31 @@ fun DigitalReceiptDialog(
                         }
                     },
                     enabled = !isLimitReached && phoneInput.length >= 10,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text("🚀 ", fontSize = 16.sp)
-                        Text("Send Silent SMS Receipt", fontWeight = FontWeight.Bold)
-                    }
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    backgroundColor = NeuYellow,
+                    textColor = NeuBlack,
+                    shadowOffset = 2.dp
+                )
 
-                // Option 2: WhatsApp Receipt (Icon at Front - WhatsApp Green)
-                Button(
+                NeuButton(
+                    text = "💬 Send via WhatsApp",
                     onClick = {
                         if (phoneInput.length >= 10) {
                             onSendWhatsApp(phoneInput)
                         }
                     },
                     enabled = phoneInput.length >= 10,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text("💬 ", fontSize = 16.sp)
-                        Text("Send via WhatsApp", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    backgroundColor = NeuGreen,
+                    textColor = NeuBlack,
+                    shadowOffset = 2.dp
+                )
             }
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Cancel", fontWeight = FontWeight.Bold, color = Color.Gray)
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Close", fontWeight = FontWeight.Black, color = NeuBlack)
             }
         }
     )

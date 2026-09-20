@@ -4,21 +4,24 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -28,8 +31,11 @@ import androidx.core.content.ContextCompat
 import com.smartvendor.ai.model.Bill
 import com.smartvendor.ai.repository.SalesRepository
 import com.smartvendor.ai.repository.SalesRepositoryImpl
-import com.smartvendor.ai.ui.theme.AccentGreen
-import com.smartvendor.ai.ui.theme.BluePrimary
+import com.smartvendor.ai.ui.components.NeuBadge
+import com.smartvendor.ai.ui.components.NeuButton
+import com.smartvendor.ai.ui.components.NeuCard
+import com.smartvendor.ai.ui.components.neuShadow
+import com.smartvendor.ai.ui.theme.*
 import com.smartvendor.ai.utils.SmsUtils
 import com.smartvendor.ai.utils.WhatsAppUtils
 
@@ -63,20 +69,73 @@ fun HistoryScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Bill History", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NeuSurface)
+                    .border(BorderStroke(2.5.dp, NeuBlack))
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(NeuSurface)
+                                .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                                .clickable { onNavigateBack() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = NeuBlack,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Sales Invoices",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp,
+                                color = NeuBlack
+                            )
+                            Text(
+                                text = "Past Completed Transactions",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = NeuGray
+                            )
+                        }
                     }
-                },
-                actions = {
-                    IconButton(onClick = { refreshTrigger++ }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(NeuYellow)
+                            .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                            .clickable { refreshTrigger++ },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = NeuBlack, modifier = Modifier.size(20.dp))
                     }
                 }
-            )
-        }
+            }
+        },
+        containerColor = NeuBackground
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -87,24 +146,46 @@ fun HistoryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search by Bill ID or Payment Mode...") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    singleLine = true
-                )
+                // Search Field
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .neuShadow(3.dp, 3.dp, NeuBlack, 10.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(NeuSurface)
+                        .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Outlined.Search, contentDescription = null, tint = NeuBlack, modifier = Modifier.size(20.dp))
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Search by Bill ID or Payment Mode...", fontSize = 13.sp, color = NeuGray) },
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent
+                            ),
+                            singleLine = true
+                        )
+                    }
+                }
 
                 if (isLoading) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = BluePrimary)
+                        CircularProgressIndicator(color = NeuBlue)
                     }
                 } else if (filteredBills.isNotEmpty()) {
                     LazyColumn(
@@ -123,31 +204,36 @@ fun HistoryScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Outlined.ReceiptLong,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = Color.Gray
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "No Invoices Found",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Make sure server is running in CMD, then tap Refresh.",
-                                style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = { refreshTrigger++ },
-                                shape = RoundedCornerShape(12.dp)
+                        NeuCard(
+                            modifier = Modifier.padding(24.dp),
+                            backgroundColor = NeuSurface,
+                            shadowOffset = 4.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Refresh History")
+                                Text(text = "🧾", fontSize = 48.sp)
+                                Text(
+                                    text = "No Invoices Recorded Yet",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 18.sp,
+                                    color = NeuBlack
+                                )
+                                Text(
+                                    text = "Completed checkouts from the POS register will appear here.",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = NeuGray
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                NeuButton(
+                                    text = "🔄 Refresh History",
+                                    onClick = { refreshTrigger++ },
+                                    backgroundColor = NeuYellow,
+                                    textColor = NeuBlack
+                                )
                             }
                         }
                     }
@@ -169,53 +255,53 @@ fun BillHistoryCard(
     bill: Bill,
     onClick: () -> Unit
 ) {
-    Card(
+    NeuCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        backgroundColor = NeuSurface,
+        shadowOffset = 3.dp,
+        cornerRadius = 12.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Bill #${bill.billId.takeLast(8)}",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    text = "Invoice #${bill.billId.takeLast(8)}",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 15.sp,
+                    color = NeuBlack
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "${bill.items.sumOf { it.quantity }} Items",
-                    style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                    text = "${bill.items.sumOf { it.quantity }} items billed",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = NeuGray
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                Surface(
-                    color = BluePrimary.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "MODE: ${bill.paymentMethod}",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = BluePrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                }
+                NeuBadge(
+                    text = "MODE: ${bill.paymentMethod.uppercase()}",
+                    backgroundColor = when (bill.paymentMethod.uppercase()) {
+                        "CASH" -> NeuGreen
+                        "UPI" -> NeuYellow
+                        else -> NeuBlue
+                    },
+                    textColor = if (bill.paymentMethod.uppercase() == "CARD") Color.White else NeuBlack,
+                    shadowOffset = 1.dp
+                )
             }
 
             Text(
                 text = "₹${"%.2f".format(bill.grandTotal)}",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = AccentGreen
-                )
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp,
+                color = NeuBlue
             )
         }
     }
@@ -227,7 +313,6 @@ fun BillDetailDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var showSendPrompt by remember { mutableStateOf(false) }
     var phoneInput by remember { mutableStateOf("") }
     val dailySmsCount = remember { SmsUtils.getDailySmsCount(context) }
     val isLimitReached = dailySmsCount >= SmsUtils.DAILY_SMS_LIMIT
@@ -243,101 +328,87 @@ fun BillDetailDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Invoice Details", fontWeight = FontWeight.Bold) },
+        containerColor = NeuSurface,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .border(BorderStroke(3.dp, NeuBlack), RoundedCornerShape(16.dp))
+            .neuShadow(6.dp, 6.dp, NeuBlack, 16.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = "🧾", fontSize = 20.sp)
+                Text("Digital Invoice #${bill.billId.takeLast(8)}", fontWeight = FontWeight.Black, fontSize = 18.sp, color = NeuBlack)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Bill ID: ${bill.billId}", fontWeight = FontWeight.Bold)
-                Text("Payment Method: ${bill.paymentMethod}")
-                HorizontalDivider()
-                Text("Items Purchased:", fontWeight = FontWeight.Bold)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                NeuBadge(
+                    text = "PAID VIA ${bill.paymentMethod.uppercase()}",
+                    backgroundColor = NeuGreen,
+                    textColor = NeuBlack
+                )
+
+                HorizontalDivider(thickness = 2.dp, color = NeuBlack)
+
                 bill.items.forEach { item ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("${item.name} x${item.quantity}")
-                        Text("₹${"%.2f".format(item.lineTotal)}")
+                        Text(
+                            text = "${item.name} x${item.quantity}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = NeuBlack
+                        )
+                        Text(
+                            text = "₹${"%.2f".format(item.lineTotal)}",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 13.sp,
+                            color = NeuBlue
+                        )
                     }
                 }
-                HorizontalDivider()
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Grand Total", fontWeight = FontWeight.Bold)
-                    Text("₹${"%.2f".format(bill.grandTotal)}", fontWeight = FontWeight.Bold, color = BluePrimary)
+
+                HorizontalDivider(thickness = 2.dp, color = NeuBlack)
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Grand Total", fontWeight = FontWeight.Black, fontSize = 16.sp, color = NeuBlack)
+                    Text("₹${"%.2f".format(bill.grandTotal)}", fontWeight = FontWeight.Black, fontSize = 18.sp, color = NeuBlue)
                 }
 
-                if (showSendPrompt) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    OutlinedTextField(
-                        value = phoneInput,
-                        onValueChange = { phoneInput = it },
-                        label = { Text("Customer Mobile Number") },
-                        placeholder = { Text("e.g. 9876543210") },
-                        leadingIcon = { Text("🇮🇳 +91 ", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                Spacer(modifier = Modifier.height(6.dp))
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Option 1: Direct Silent SMS
-                    Button(
-                        onClick = {
-                            if (phoneInput.length >= 10) {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
-                                    val sent = SmsUtils.sendSilentSmsReceipt(context, phoneInput, bill)
-                                    if (sent) onDismiss()
-                                } else {
-                                    smsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
-                                }
-                            }
-                        },
-                        enabled = !isLimitReached && phoneInput.length >= 10,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🚀 ", fontSize = 16.sp)
-                            Text("Send Silent SMS Receipt", fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // Option 2: Send via WhatsApp
-                    Button(
-                        onClick = {
-                            if (phoneInput.length >= 10) {
-                                WhatsAppUtils.sendWhatsAppBill(context, phoneInput, bill)
-                                onDismiss()
-                            }
-                        },
-                        enabled = phoneInput.length >= 10,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("💬 ", fontSize = 16.sp)
-                            Text("Send via WhatsApp", fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (!showSendPrompt) {
-                Button(
-                    onClick = { showSendPrompt = true },
+                OutlinedTextField(
+                    value = phoneInput,
+                    onValueChange = { phoneInput = it },
+                    label = { Text("Resend to Mobile", fontWeight = FontWeight.Bold) },
+                    placeholder = { Text("9876543210") },
+                    leadingIcon = { Text("🇮🇳 +91 ", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Black) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Send Digital Receipt 📱", fontWeight = FontWeight.Bold)
-                }
+                )
+
+                NeuButton(
+                    text = "💬 Share on WhatsApp",
+                    onClick = {
+                        if (phoneInput.length >= 10) {
+                            WhatsAppUtils.sendWhatsAppBill(context, phoneInput, bill)
+                            onDismiss()
+                        }
+                    },
+                    enabled = phoneInput.length >= 10,
+                    modifier = Modifier.fillMaxWidth(),
+                    backgroundColor = NeuGreen,
+                    textColor = NeuBlack,
+                    shadowOffset = 2.dp
+                )
             }
         },
+        confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Close", fontWeight = FontWeight.Black, color = NeuBlack)
             }
         }
     )

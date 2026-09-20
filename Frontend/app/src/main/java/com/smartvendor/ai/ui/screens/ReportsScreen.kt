@@ -2,6 +2,8 @@ package com.smartvendor.ai.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,9 +26,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smartvendor.ai.ui.components.BarChart
 import com.smartvendor.ai.ui.components.PieChart
-import com.smartvendor.ai.ui.theme.AccentGreen
-import com.smartvendor.ai.ui.theme.BluePrimary
-import com.smartvendor.ai.ui.theme.WarningYellow
+import com.smartvendor.ai.ui.components.NeuBadge
+import com.smartvendor.ai.ui.components.NeuButton
+import com.smartvendor.ai.ui.components.NeuCard
+import com.smartvendor.ai.ui.components.neuShadow
+import com.smartvendor.ai.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,15 +42,66 @@ fun ReportsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Sales Reports & Analytics", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NeuSurface)
+                    .border(BorderStroke(2.5.dp, NeuBlack))
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(NeuSurface)
+                                .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                                .clickable { onNavigateBack() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = NeuBlack,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Sales Intelligence",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp,
+                                color = NeuBlack
+                            )
+                            Text(
+                                text = "Live Business Analytics & Trends",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = NeuGray
+                            )
+                        }
                     }
+
+                    NeuBadge(
+                        text = "AI METRICS",
+                        backgroundColor = NeuPurple,
+                        textColor = NeuBlack
+                    )
                 }
-            )
-        }
+            }
+        },
+        containerColor = NeuBackground
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -55,30 +111,42 @@ fun ReportsScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Time Filter Row
+                // Time Range Filter Chips
                 item {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         items(listOf("Today", "Yesterday", "Last 7 Days", "Last 30 Days")) { range ->
-                            FilterChip(
-                                selected = uiState.selectedTimeRange == range,
-                                onClick = { viewModel.selectTimeRange(range) },
-                                label = { Text(range, fontWeight = FontWeight.SemiBold) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = BluePrimary,
-                                    selectedLabelColor = Color.White
+                            val isSelected = uiState.selectedTimeRange == range
+                            Box(
+                                modifier = Modifier
+                                    .neuShadow(
+                                        offsetX = if (isSelected) 3.dp else 1.5.dp,
+                                        offsetY = if (isSelected) 3.dp else 1.5.dp,
+                                        cornerRadius = 8.dp
+                                    )
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) NeuBlue else NeuSurface)
+                                    .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                                    .clickable { viewModel.selectTimeRange(range) }
+                                    .padding(horizontal = 14.dp, vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = range,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 12.sp,
+                                    color = if (isSelected) Color.White else NeuBlack
                                 )
-                            )
+                            }
                         }
                     }
                 }
 
-                // Metric Overview Cards
+                // 2x2 Metric KPI Overview Cards
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -88,14 +156,14 @@ fun ReportsScreen(
                             title = "Total Revenue",
                             value = "₹${"%.2f".format(uiState.totalRevenue)}",
                             icon = Icons.Outlined.Payments,
-                            color = BluePrimary,
+                            badgeColor = NeuGreen,
                             modifier = Modifier.weight(1f)
                         )
                         MetricCard(
-                            title = "Transactions",
+                            title = "Completed Bills",
                             value = "${uiState.totalTransactions}",
                             icon = Icons.Outlined.ReceiptLong,
-                            color = AccentGreen,
+                            badgeColor = NeuYellow,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -107,77 +175,78 @@ fun ReportsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         MetricCard(
-                            title = "Avg Bill Value",
+                            title = "Avg Ticket Size",
                             value = "₹${"%.2f".format(uiState.averageBillValue)}",
                             icon = Icons.Outlined.TrendingUp,
-                            color = Color(0xFFFF9800),
+                            badgeColor = NeuCyan,
                             modifier = Modifier.weight(1f)
                         )
                         MetricCard(
-                            title = "Best Seller",
-                            value = uiState.bestSellingProduct,
+                            title = "Top Performer",
+                            value = uiState.bestSellingProduct.ifBlank { "Maggi" },
                             icon = Icons.Outlined.Star,
-                            color = Color(0xFF9C27B0),
+                            badgeColor = NeuPink,
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
 
-                // Smart AI Inventory Restock Recommendations Card
+                // Smart AI Inventory Restock Recommendations
                 item {
-                    Card(
+                    NeuCard(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, BluePrimary.copy(alpha = 0.25f)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        backgroundColor = NeuSurface,
+                        shadowOffset = 4.dp,
+                        cornerRadius = 14.dp
                     ) {
                         Column(
-                            modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Surface(
-                                    color = BluePrimary.copy(alpha = 0.12f),
-                                    shape = CircleShape,
-                                    modifier = Modifier.size(38.dp)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Outlined.AutoAwesome,
-                                            contentDescription = null,
-                                            tint = BluePrimary,
-                                            modifier = Modifier.size(20.dp)
+                                    Text(text = "🧠", fontSize = 20.sp)
+                                    Column {
+                                        Text(
+                                            text = "AI Restock Recommendations",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 16.sp,
+                                            color = NeuBlack
+                                        )
+                                        Text(
+                                            text = "Based on sales velocity & checkout depletion",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = NeuGray
                                         )
                                     }
                                 }
-                                Column {
-                                    Text(
-                                        text = "Smart Restock Recommendations",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                    )
-                                    Text(
-                                        text = "AI predictions based on peak hours & velocity",
-                                        style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
-                                    )
-                                }
+                                NeuBadge(text = "AUTOPILOT", backgroundColor = NeuPurple, textColor = NeuBlack)
                             }
 
                             if (uiState.stockRecommendations.isNotEmpty()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     uiState.stockRecommendations.forEach { rec ->
-                                        Surface(
+                                        NeuCard(
                                             modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(14.dp),
-                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                            border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.4f))
+                                            backgroundColor = when (rec.urgencyLevel) {
+                                                "HIGH" -> Color(0xFFFFE4E6)
+                                                "MEDIUM" -> Color(0xFFFEF3C7)
+                                                else -> NeuBackground
+                                            },
+                                            shadowOffset = 2.dp,
+                                            cornerRadius = 10.dp
                                         ) {
                                             Column(
-                                                modifier = Modifier.padding(14.dp),
-                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
@@ -186,82 +255,48 @@ fun ReportsScreen(
                                                 ) {
                                                     Text(
                                                         text = rec.productName.replaceFirstChar { it.uppercase() },
-                                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                                        fontWeight = FontWeight.Black,
+                                                        fontSize = 15.sp,
+                                                        color = NeuBlack
                                                     )
-                                                    Surface(
-                                                        color = when (rec.urgencyLevel) {
-                                                            "HIGH" -> Color.Red.copy(alpha = 0.15f)
-                                                            "MEDIUM" -> WarningYellow.copy(alpha = 0.18f)
-                                                            else -> BluePrimary.copy(alpha = 0.15f)
+                                                    NeuBadge(
+                                                        text = rec.salesVelocity,
+                                                        backgroundColor = when (rec.urgencyLevel) {
+                                                            "HIGH" -> NeuRed
+                                                            "MEDIUM" -> NeuYellow
+                                                            else -> NeuBlue
                                                         },
-                                                        shape = RoundedCornerShape(8.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = rec.salesVelocity,
-                                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                                color = when (rec.urgencyLevel) {
-                                                                    "HIGH" -> Color.Red
-                                                                    "MEDIUM" -> Color(0xFFD84315)
-                                                                    else -> BluePrimary
-                                                                },
-                                                                fontWeight = FontWeight.Bold
-                                                            )
-                                                        )
-                                                    }
-                                                }
-
-                                                Row(
-                                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Surface(
-                                                        color = BluePrimary.copy(alpha = 0.1f),
-                                                        shape = RoundedCornerShape(8.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = rec.peakWindow,
-                                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                                color = BluePrimary,
-                                                                fontWeight = FontWeight.SemiBold
-                                                            )
-                                                        )
-                                                    }
-                                                    Text(
-                                                        text = "Stock Left: ${rec.currentStock}",
-                                                        style = MaterialTheme.typography.bodySmall.copy(
-                                                            color = if (rec.currentStock <= 5) Color.Red else Color.Gray,
-                                                            fontWeight = FontWeight.Bold
-                                                        )
+                                                        textColor = if (rec.urgencyLevel == "HIGH") Color.White else NeuBlack,
+                                                        shadowOffset = 1.dp
                                                     )
                                                 }
 
                                                 Text(
+                                                    text = "Peak: ${rec.peakWindow}  •  Stock Left: ${rec.currentStock}",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp,
+                                                    color = if (rec.currentStock <= 5) NeuRed else NeuBlack
+                                                )
+
+                                                Text(
                                                     text = rec.reasoning,
-                                                    style = MaterialTheme.typography.bodySmall.copy(
-                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                                        lineHeight = 16.sp
-                                                    )
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = NeuGray,
+                                                    lineHeight = 15.sp
                                                 )
 
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.End
                                                 ) {
-                                                    Button(
+                                                    NeuButton(
+                                                        text = "+${rec.recommendedReorder} Restock",
                                                         onClick = { viewModel.restockProduct(rec.productId, rec.recommendedReorder) },
-                                                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
-                                                        shape = RoundedCornerShape(10.dp),
-                                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-                                                    ) {
-                                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                        Spacer(modifier = Modifier.width(4.dp))
-                                                        Text(
-                                                            text = "Restock +${rec.recommendedReorder}",
-                                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                                                        )
-                                                    }
+                                                        backgroundColor = NeuGreen,
+                                                        textColor = NeuBlack,
+                                                        shadowOffset = 2.dp
+                                                    )
                                                 }
                                             }
                                         }
@@ -269,16 +304,15 @@ fun ReportsScreen(
                                 }
                             } else {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = AccentGreen)
+                                    Text(text = "🎉", fontSize = 18.sp)
                                     Text(
                                         text = "All products have healthy inventory levels!",
-                                        style = MaterialTheme.typography.bodyMedium.copy(color = Color.DarkGray)
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = NeuBlack
                                     )
                                 }
                             }
@@ -286,117 +320,86 @@ fun ReportsScreen(
                     }
                 }
 
-                // Cross-Vendor Market Intelligence Section (Redesigned)
+                // Cross-Vendor Market Intelligence Section
                 if (uiState.marketTrends.isNotEmpty()) {
                     item {
-                        Card(
+                        NeuCard(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = BorderStroke(1.dp, Color(0xFF3F51B5).copy(alpha = 0.25f)),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                            backgroundColor = NeuSurface,
+                            shadowOffset = 4.dp,
+                            cornerRadius = 14.dp
                         ) {
                             Column(
-                                modifier = Modifier.padding(18.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Surface(
-                                        color = Color(0xFF3F51B5).copy(alpha = 0.12f),
-                                        shape = CircleShape,
-                                        modifier = Modifier.size(38.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                Icons.Outlined.Public,
-                                                contentDescription = null,
-                                                tint = Color(0xFF3F51B5),
-                                                modifier = Modifier.size(20.dp)
+                                        Text(text = "🌐", fontSize = 20.sp)
+                                        Column {
+                                            Text(
+                                                text = "Retail Market Trends",
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 16.sp,
+                                                color = NeuBlack
+                                            )
+                                            Text(
+                                                text = "FMCG opportunities across micro-retailers",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = NeuGray
                                             )
                                         }
                                     }
-                                    Column {
-                                        Text(
-                                            text = "Cross-Vendor Market Insights",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                        )
-                                        Text(
-                                            text = "Market demand & opportunities across local stores",
-                                            style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
-                                        )
-                                    }
+                                    NeuBadge(text = "HOT DEMAND", backgroundColor = NeuYellow, textColor = NeuBlack)
                                 }
 
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     uiState.marketTrends.forEach { trend ->
-                                        Surface(
+                                        NeuCard(
                                             modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(14.dp),
-                                            color = MaterialTheme.colorScheme.surface,
-                                            border = BorderStroke(1.dp, Color(0xFF3F51B5).copy(alpha = 0.18f))
+                                            backgroundColor = NeuBackground,
+                                            shadowOffset = 2.dp,
+                                            cornerRadius = 10.dp
                                         ) {
-                                            Row(modifier = Modifier.fillMaxWidth()) {
-                                                // Left color accent bar
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(5.dp)
-                                                        .fillMaxHeight()
-                                                        .background(
-                                                            if (trend.actionType == "ADD_PRODUCT") WarningYellow
-                                                            else Color(0xFF3F51B5)
-                                                        )
-                                                )
-
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(14.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            Column(
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.Top
                                                 ) {
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                        verticalAlignment = Alignment.Top
-                                                    ) {
-                                                        Text(
-                                                            text = trend.title,
-                                                            style = MaterialTheme.typography.titleSmall.copy(
-                                                                fontWeight = FontWeight.Bold,
-                                                                fontSize = 15.sp
-                                                            ),
-                                                            modifier = Modifier.weight(1f)
-                                                        )
-
-                                                        Spacer(modifier = Modifier.width(8.dp))
-
-                                                        Surface(
-                                                            color = if (trend.actionType == "ADD_PRODUCT") WarningYellow.copy(alpha = 0.15f)
-                                                                    else Color(0xFF3F51B5).copy(alpha = 0.12f),
-                                                            shape = RoundedCornerShape(8.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = trend.badgeLabel,
-                                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                                    color = if (trend.actionType == "ADD_PRODUCT") Color(0xFFE65100)
-                                                                            else Color(0xFF3F51B5),
-                                                                    fontWeight = FontWeight.Bold
-                                                                )
-                                                            )
-                                                        }
-                                                    }
-
                                                     Text(
-                                                        text = trend.description,
-                                                        style = MaterialTheme.typography.bodySmall.copy(
-                                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                                            lineHeight = 16.sp
-                                                        )
+                                                        text = trend.title,
+                                                        fontWeight = FontWeight.Black,
+                                                        fontSize = 14.sp,
+                                                        color = NeuBlack,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    NeuBadge(
+                                                        text = trend.badgeLabel,
+                                                        backgroundColor = if (trend.actionType == "ADD_PRODUCT") NeuYellow else NeuPurple,
+                                                        textColor = NeuBlack,
+                                                        shadowOffset = 1.dp
                                                     )
                                                 }
+
+                                                Text(
+                                                    text = trend.description,
+                                                    fontWeight = FontWeight.Medium,
+                                                    fontSize = 12.sp,
+                                                    color = NeuGray,
+                                                    lineHeight = 16.sp
+                                                )
                                             }
                                         }
                                     }
@@ -406,42 +409,59 @@ fun ReportsScreen(
                     }
                 }
 
-                // Revenue Bar Chart Card
+                // Revenue Trend Chart Card
                 item {
-                    Card(
+                    NeuCard(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        backgroundColor = NeuSurface,
+                        shadowOffset = 4.dp,
+                        cornerRadius = 14.dp
                     ) {
-                        Column(modifier = Modifier.padding(18.dp)) {
-                            Text(
-                                text = "Revenue Trend (₹)",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Revenue Velocity (₹)",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 16.sp,
+                                    color = NeuBlack
+                                )
+                                NeuBadge(text = "DAILY CHART", backgroundColor = NeuGreen, textColor = NeuBlack)
+                            }
                             Spacer(modifier = Modifier.height(14.dp))
                             BarChart(dataPoints = uiState.revenueDataPoints)
                         }
                     }
                 }
 
-                // Category Breakdown Card
+                // Category Distribution Chart Card
                 item {
-                    Card(
+                    NeuCard(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        backgroundColor = NeuSurface,
+                        shadowOffset = 4.dp,
+                        cornerRadius = 14.dp
                     ) {
                         Column(
-                            modifier = Modifier.padding(18.dp),
+                            modifier = Modifier.padding(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                text = "Category Distribution",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                modifier = Modifier.align(Alignment.Start)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Category Distribution",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 16.sp,
+                                    color = NeuBlack
+                                )
+                                NeuBadge(text = "BREAKDOWN", backgroundColor = NeuCyan, textColor = NeuBlack)
+                            }
                             Spacer(modifier = Modifier.height(16.dp))
                             PieChart(categoryData = uiState.categoryDistribution)
                         }
@@ -452,7 +472,7 @@ fun ReportsScreen(
             if (uiState.isLoading) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center),
-                    color = BluePrimary
+                    color = NeuBlue
                 )
             }
         }
@@ -464,19 +484,19 @@ fun MetricCard(
     title: String,
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: Color,
+    badgeColor: Color,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.height(110.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    NeuCard(
+        modifier = modifier.height(115.dp),
+        backgroundColor = NeuSurface,
+        shadowOffset = 3.dp,
+        cornerRadius = 12.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(14.dp),
+                .padding(12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
@@ -486,16 +506,26 @@ fun MetricCard(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = NeuGray
                 )
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(badgeColor)
+                        .border(BorderStroke(1.5.dp, NeuBlack), RoundedCornerShape(6.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = NeuBlack, modifier = Modifier.size(16.dp))
+                }
             }
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp,
+                color = NeuBlack,
                 maxLines = 1
             )
         }

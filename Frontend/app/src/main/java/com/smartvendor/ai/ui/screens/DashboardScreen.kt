@@ -1,7 +1,9 @@
 package com.smartvendor.ai.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -24,8 +25,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.smartvendor.ai.ui.theme.BlueDark
-import com.smartvendor.ai.ui.theme.BluePrimary
+import com.smartvendor.ai.ui.components.NeuBadge
+import com.smartvendor.ai.ui.components.NeuButton
+import com.smartvendor.ai.ui.components.NeuCard
+import com.smartvendor.ai.ui.components.neuShadow
+import com.smartvendor.ai.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,7 +53,7 @@ fun DashboardScreen(
                 onProfileClick = { onNavigateToSettings() }
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = NeuBackground
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -59,10 +63,10 @@ fun DashboardScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Primary Action: New Bill / Resume Bill Card
+                // Hero Action: Neubrutalist Start New Bill Card
                 item {
                     NewBillCard(
                         openBillId = uiState.openBillId,
@@ -75,36 +79,48 @@ fun DashboardScreen(
                     )
                 }
 
-                // Grid/Row Actions
-                item {
-                    Text(
-                        text = "Quick Actions",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        ),
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-
+                // Section Title
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "COMMAND HUB",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Black,
+                                color = NeuBlack,
+                                letterSpacing = 1.sp
+                            )
+                        )
+                        NeuBadge(
+                            text = "EDGE POS",
+                            backgroundColor = NeuYellow,
+                            textColor = NeuBlack
+                        )
+                    }
+                }
+
+                // 2x2 Neubrutalist Quick Action Grid
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         DashboardActionCard(
                             title = "Inventory",
-                            description = "Manage Products",
+                            description = "Stock & Catalog",
                             icon = Icons.Outlined.Inventory2,
-                            accentColor = Color(0xFF4CAF50),
+                            accentColor = NeuGreen,
                             modifier = Modifier.weight(1f),
                             onClick = onNavigateToInventory
                         )
                         DashboardActionCard(
-                            title = "Sales Reports",
-                            description = "View Analytics",
+                            title = "Analytics",
+                            description = "Revenue & Sales",
                             icon = Icons.Outlined.BarChart,
-                            accentColor = Color(0xFFFF9800),
+                            accentColor = NeuYellow,
                             modifier = Modifier.weight(1f),
                             onClick = onNavigateToReports
                         )
@@ -114,21 +130,21 @@ fun DashboardScreen(
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         DashboardActionCard(
                             title = "Bill History",
-                            description = "Past Invoices",
+                            description = "Past Receipts",
                             icon = Icons.Outlined.ReceiptLong,
-                            accentColor = Color(0xFF9C27B0),
+                            accentColor = NeuPurple,
                             modifier = Modifier.weight(1f),
                             onClick = onNavigateToHistory
                         )
                         DashboardActionCard(
                             title = "Settings",
-                            description = "App Preferences",
+                            description = "GST & UPI Config",
                             icon = Icons.Outlined.Settings,
-                            accentColor = Color(0xFF607D8B),
+                            accentColor = NeuCyan,
                             modifier = Modifier.weight(1f),
                             onClick = onNavigateToSettings
                         )
@@ -141,13 +157,15 @@ fun DashboardScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(16.dp),
+                    containerColor = NeuRed,
+                    contentColor = Color.White,
                     action = {
                         TextButton(onClick = { viewModel.clearError() }) {
-                            Text("DISMISS", color = Color.White)
+                            Text("DISMISS", color = Color.White, fontWeight = FontWeight.Black)
                         }
                     }
                 ) {
-                    Text(uiState.errorMessage!!)
+                    Text(uiState.errorMessage!!, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -166,7 +184,6 @@ fun DashboardScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardTopBar(
     userName: String,
@@ -175,96 +192,111 @@ fun DashboardTopBar(
     onNotificationClick: () -> Unit,
     onProfileClick: () -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(NeuSurface)
+            .border(BorderStroke(2.5.dp, NeuBlack))
+            .statusBarsPadding()
+            .padding(horizontal = 18.dp, vertical = 12.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Welcome,",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "ScanSnap",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 18.sp,
+                        color = NeuBlack
                     )
-                )
+                    Text(
+                        text = "AI",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 18.sp,
+                        color = NeuBlue
+                    )
+                }
                 Text(
-                    text = userName,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
+                    text = if (storeName.isNotBlank()) storeName else "Smart Kirana Store",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = NeuGray,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = storeName,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = BluePrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
                 )
             }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                IconButton(
-                    onClick = onNotificationClick,
+                // Notification Button with Solid Shadow
+                Box(
                     modifier = Modifier
-                        .background(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = CircleShape
-                        )
                         .size(42.dp)
+                        .neuShadow(offsetX = 2.dp, offsetY = 2.dp, cornerRadius = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(NeuSurface)
+                        .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                        .clickable { onNotificationClick() },
+                    contentAlignment = Alignment.Center
                 ) {
                     if (urgentAlertCount > 0) {
                         BadgedBox(
                             badge = {
-                                Badge(
-                                    containerColor = Color(0xFFD32F2F),
-                                    contentColor = Color.White
+                                Box(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .background(NeuRed, CircleShape)
+                                        .border(BorderStroke(1.dp, NeuBlack), CircleShape),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text("$urgentAlertCount", fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "$urgentAlertCount",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
                                 }
                             }
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.NotificationsActive,
-                                contentDescription = "Urgent Stock Alerts ($urgentAlertCount)",
-                                tint = Color(0xFFD32F2F)
+                                contentDescription = "Urgent Alerts",
+                                tint = NeuRed,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     } else {
                         Icon(
                             imageVector = Icons.Outlined.Notifications,
                             contentDescription = "Notifications",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            tint = NeuBlack,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
 
+                // Profile Avatar Button
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(BluePrimary)
+                        .size(42.dp)
+                        .neuShadow(offsetX = 2.dp, offsetY = 2.dp, cornerRadius = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(NeuYellow)
+                        .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
                         .clickable { onProfileClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = "Profile",
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp)
+                    Text(
+                        text = if (userName.isNotBlank()) userName.take(1).uppercase() else "S",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 18.sp,
+                        color = NeuBlack
                     )
                 }
             }
@@ -278,88 +310,103 @@ fun NewBillCard(
     isLoading: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = !isLoading, onClick = onClick),
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    NeuCard(
+        modifier = Modifier.fillMaxWidth(),
+        backgroundColor = NeuBlue,
+        borderColor = NeuBlack,
+        shadowOffset = 5.dp,
+        cornerRadius = 16.dp,
+        onClick = if (!isLoading) onClick else null
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(BluePrimary, BlueDark)
-                    )
-                )
-                .padding(24.dp)
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NeuBadge(
+                    text = "⚡ INSTANT AI BILLING",
+                    backgroundColor = NeuYellow,
+                    textColor = NeuBlack
+                )
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White)
+                        .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "📸", fontSize = 18.sp)
+                }
+            }
+
+            Text(
+                text = "Launch Visual POS",
+                fontWeight = FontWeight.Black,
+                fontSize = 24.sp,
+                color = Color.White,
+                letterSpacing = (-0.5).sp
+            )
+
+            Text(
+                text = "Point camera at FMCG products for sub-50ms YOLO object detection & instant cart billing.",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.9f),
+                lineHeight = 18.sp
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Embedded Action Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .neuShadow(3.dp, 3.dp, NeuBlack, 10.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(NeuSurface)
+                    .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(Color.White.copy(alpha = 0.2f), shape = RoundedCornerShape(16.dp)),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.QrCodeScanner,
-                            contentDescription = "Scan Icon",
-                            tint = Color.White,
-                            modifier = Modifier.size(30.dp)
+                        Text(
+                            text = "⚡",
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = if (isLoading) "Initializing AI Scanner..." else "Start Camera Scanner",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 14.sp,
+                            color = NeuBlack
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Start New Bill",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                )
-
-                Text(
-                    text = "Point camera at products for automatic YOLO AI detection & live billing.",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
                     if (isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White,
+                            modifier = Modifier.size(18.dp),
+                            color = NeuBlack,
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text(
-                            text = "Open Camera Scanner",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        )
                         Icon(
                             imageVector = Icons.Default.ArrowForward,
                             contentDescription = null,
-                            tint = Color.White
+                            tint = NeuBlack,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -377,50 +424,52 @@ fun DashboardActionCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Card(
-        modifier = modifier
-            .height(140.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    NeuCard(
+        modifier = modifier.height(130.dp),
+        backgroundColor = NeuSurface,
+        borderColor = NeuBlack,
+        shadowOffset = 4.dp,
+        cornerRadius = 14.dp,
+        onClick = onClick
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(14.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
-                    .background(accentColor.copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp)),
+                    .size(40.dp)
+                    .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(accentColor)
+                    .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = title,
-                    tint = accentColor,
-                    modifier = Modifier.size(24.dp)
+                    tint = NeuBlack,
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
             Column {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 16.sp,
+                    color = NeuBlack,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = NeuGray,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -440,14 +489,14 @@ fun UrgentStockNotificationSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        containerColor = NeuBackground,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -455,55 +504,61 @@ fun UrgentStockNotificationSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = null,
-                        tint = Color(0xFFD32F2F),
-                        modifier = Modifier.size(26.dp)
-                    )
+                    Text(text = "🚨", fontSize = 20.sp)
                     Column {
                         Text(
-                            text = "🚨 Urgent Stock Alerts",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            text = "Urgent Stock Alerts",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 18.sp,
+                            color = NeuBlack
                         )
                         Text(
                             text = if (alerts.isNotEmpty())
                                 "${alerts.size} items require immediate replenishment"
                             else
                                 "All stock levels healthy",
-                            style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NeuGray
                         )
                     }
                 }
 
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(NeuSurface)
+                        .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(6.dp))
+                        .clickable { onDismiss() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "✕", fontWeight = FontWeight.Black, fontSize = 14.sp, color = NeuBlack)
                 }
             }
 
-            HorizontalDivider()
+            HorizontalDivider(thickness = 2.dp, color = NeuBlack)
 
             if (alerts.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 32.dp),
+                        .padding(vertical = 28.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(48.dp)
-                        )
+                        Text(text = "🎉", fontSize = 36.sp)
                         Text(
                             text = "All Inventory Healthy!",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            fontWeight = FontWeight.Black,
+                            fontSize = 16.sp,
+                            color = NeuBlack
                         )
                         Text(
-                            text = "No out-of-stock or critical items right now.",
-                            style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                            text = "Zero critical stock alerts right now.",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = NeuGray
                         )
                     }
                 }
@@ -511,45 +566,35 @@ fun UrgentStockNotificationSheet(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 400.dp),
+                        .heightIn(max = 380.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(alerts) { item ->
-                        Card(
+                        NeuCard(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (item.isOutOfStock)
-                                    Color(0xFFFFEBEE)
-                                else
-                                    Color(0xFFFFF8E1)
-                            )
+                            backgroundColor = if (item.isOutOfStock) Color(0xFFFFE4E6) else Color(0xFFFEF3C7),
+                            shadowOffset = 3.dp,
+                            cornerRadius = 10.dp
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(14.dp),
+                                    .padding(12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Surface(
-                                            color = if (item.isOutOfStock) Color(0xFFD32F2F) else Color(0xFFFFA000),
-                                            shape = RoundedCornerShape(6.dp)
-                                        ) {
-                                            Text(
-                                                text = if (item.isOutOfStock) "OUT OF STOCK" else "LOW STOCK",
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    color = Color.White,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            )
-                                        }
+                                        NeuBadge(
+                                            text = if (item.isOutOfStock) "OUT OF STOCK" else "LOW STOCK",
+                                            backgroundColor = if (item.isOutOfStock) NeuRed else NeuYellow,
+                                            textColor = if (item.isOutOfStock) Color.White else NeuBlack
+                                        )
                                         Text(
                                             text = item.category,
-                                            style = MaterialTheme.typography.labelSmall.copy(color = Color.Gray)
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NeuGray
                                         )
                                     }
 
@@ -557,51 +602,46 @@ fun UrgentStockNotificationSheet(
 
                                     Text(
                                         text = item.name,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 15.sp,
+                                        color = NeuBlack,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
 
                                     Text(
-                                        text = "Current: ${item.currentStock} units (Min: ${item.lowStockThreshold})",
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            color = if (item.isOutOfStock) Color(0xFFD32F2F) else Color(0xFFE65100),
-                                            fontWeight = FontWeight.SemiBold
-                                        )
+                                        text = "Current: ${item.currentStock} units (Threshold: ${item.lowStockThreshold})",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (item.isOutOfStock) NeuRed else NeuBlack
                                     )
                                 }
 
-                                Button(
+                                NeuButton(
+                                    text = "+20 Stock",
                                     onClick = { onQuickRestock(item.id) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (item.isOutOfStock) Color(0xFFD32F2F) else Color(0xFF2E7D32)
-                                    ),
-                                    shape = RoundedCornerShape(12.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("+20 Stock", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
+                                    backgroundColor = NeuGreen,
+                                    textColor = NeuBlack,
+                                    shadowOffset = 2.dp
+                                )
                             }
                         }
                     }
                 }
             }
 
-            Button(
+            NeuButton(
+                text = "📦 Open Inventory Manager",
                 onClick = {
                     onDismiss()
                     onNavigateToInventory()
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
-            ) {
-                Text("Open Full Inventory Management", fontWeight = FontWeight.Bold)
-            }
+                backgroundColor = NeuBlue,
+                textColor = Color.White
+            )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }
