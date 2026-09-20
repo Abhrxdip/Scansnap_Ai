@@ -67,12 +67,19 @@ class OcrScannerManager {
         "ore0" to "oreo", "0reo" to "oreo", "oreq" to "oreo", "orco" to "oreo", "cakoy" to "oreo", "qikany" to "oreo",
         "naggi" to "maggi", "maggl" to "maggi", "meggi" to "maggi", "mggi" to "maggi", "2-minute" to "maggi", "2 minute" to "maggi", "masala maggi" to "maggi",
         "layss" to "lays chips", "lais" to "lays chips", "layz" to "lays chips", "lay's" to "lays chips",
-        "ashirvad" to "aashirvaad atta",
+        "ashirvad" to "aashirvaad atta", "asirvad" to "aashirvaad atta",
         "hide 3seek" to "hide and seek", "hde seek" to "hide and seek", "hide & seek" to "hide and seek",
         "jimjan" to "jim jam", "jimiam" to "jim jam", "jimyam" to "jim jam", "jimjam" to "jim jam", "naughty jam" to "jim jam",
         "soya stica" to "soya sticks", "soya stic" to "soya sticks",
         "surf excel" to "surf excel", "surf" to "surf excel", "excel" to "surf excel",
-        "appy" to "appy fizz", "fizz" to "appy fizz", "appe fizz" to "appy fizz"
+        "appy" to "appy fizz", "fizz" to "appy fizz", "appe fizz" to "appy fizz",
+        "bourbon" to "bourbon", "burbon" to "bourbon", "bourbonn" to "bourbon", "borbon" to "bourbon",
+        "bourbon biscuit" to "bourbon", "choco bourbon" to "bourbon",
+        "parle-g" to "parle g", "parleg" to "parle g", "parle" to "parle g",
+        "goodday" to "good day", "good-day" to "good day",
+        "kurkure" to "kurkure", "kur kure" to "kurkure",
+        "dettol" to "dettol", "detol" to "dettol",
+        "colgate" to "colgate", "colgat" to "colgate"
     )
 
     private val noiseWords = setOf(
@@ -284,6 +291,102 @@ class OcrScannerManager {
             .addOnFailureListener { e ->
                 imageProxy.close()
                 Log.e(TAG, "OCR recognition error", e)
+                onError(e)
+            }
+    }
+
+    /**
+     * Process a Bitmap directly using ML Kit Text Recognition.
+     */
+    fun processBitmap(
+        bitmap: android.graphics.Bitmap,
+        onSuccess: (OcrResult) -> Unit,
+        onNotFound: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val image = InputImage.fromBitmap(bitmap, 0)
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                val fullText = visionText.text
+                if (fullText.isBlank()) {
+                    onNotFound()
+                    return@addOnSuccessListener
+                }
+
+                var detectedPrice: Double? = null
+                var detectedName: String? = null
+                var detectedUnit: String? = null
+
+                val priceMatch = priceRegex.find(fullText)
+                if (priceMatch != null) {
+                    val priceStr = priceMatch.groupValues[1]
+                    detectedPrice = priceStr.toDoubleOrNull()
+                }
+
+                val unitMatch = quantityUnitRegex.find(fullText)
+                if (unitMatch != null) {
+                    detectedUnit = unitMatch.groupValues[1].uppercase(Locale.getDefault())
+                }
+
+                val allLines = visionText.textBlocks.flatMap { it.lines }
+                val validLines = allLines
+                    .filter { line ->
+                        val text = line.text.trim()
+                        if (text.length < 3 || text.length > 40) return@filter false
+                        if (priceRegex.containsMatchIn(text)) return@filter false
+
+                        val lineLower = text.lowercase(Locale.getDefault())
+                        val tokens = lineLower.split(Regex("""[\s\-_,.:;]+""")).filter { it.isNotBlank() }
+
+                        val nonNoiseTokens = tokens.filter { t -> t !in noiseWords && t.length >= 2 }
+                        nonNoiseTokens.isNotEmpty()
+                    }
+                    .sortedByDescending { line ->
+                        val box = line.boundingBox ?: Rect()
+                        box.width() * box.height()
+                    }
+
+                if (validLines.isNotEmpty()) {
+                    val topCandidateText = validLines.first().text.trim()
+                    detectedName = topCandidateText
+                        .lowercase(Locale.getDefault())
+                        .split(" ")
+                        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+                }
+
+                if (detectedPrice == null) {
+                    allLines.forEach { line ->
+                        if (line.text.contains("₹") || line.text.contains("Rs", ignoreCase = true)) {
+                            val match = standalonePriceRegex.find(line.text)
+                            if (match != null) {
+                                detectedPrice = match.groupValues[1].toDoubleOrNull()
+                            }
+                        }
+                    }
+                }
+
+                if (!detectedName.isNullOrBlank()) {
+                    val combinedName = if (!detectedUnit.isNullOrBlank() && !detectedName!!.contains(detectedUnit!!, ignoreCase = true)) {
+                        "$detectedName $detectedUnit"
+                    } else {
+                        detectedName!!
+                    }
+
+                    onSuccess(
+                        OcrResult(
+                            productName = detectedName!!,
+                            quantityUnit = detectedUnit,
+                            fullCombinedName = combinedName,
+                            price = detectedPrice,
+                            detectedColor = PackagingColor.UNKNOWN
+                        )
+                    )
+                } else {
+                    onNotFound()
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "OCR recognition error on bitmap", e)
                 onError(e)
             }
     }

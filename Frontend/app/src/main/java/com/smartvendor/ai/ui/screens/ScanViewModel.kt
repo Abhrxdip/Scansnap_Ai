@@ -150,24 +150,7 @@ class ScanViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isProcessingFrame = true) }
 
-            // 1. OCR Label & Price Scanning Mode
-            if (_uiState.value.isOcrActive) {
-                ocrScanner.processImage(
-                    imageProxy = imageProxy,
-                    onSuccess = { ocrResult ->
-                        handleOcrDetected(ocrResult)
-                    },
-                    onNotFound = {
-                        _uiState.update { it.copy(isProcessingFrame = false) }
-                    },
-                    onError = {
-                        _uiState.update { it.copy(isProcessingFrame = false) }
-                    }
-                )
-                return@launch
-            }
-
-            // 2. Barcode Scanner Mode
+            // 1. Barcode Scanner Mode (if explicitly active)
             if (_uiState.value.isBarcodeActive) {
                 barcodeScanner.scanImage(
                     imageProxy = imageProxy,
@@ -184,132 +167,189 @@ class ScanViewModel(
                 return@launch
             }
 
-            // 3. Fast YOLO Multi-Object Detection (best.pt with strict 0.65 confidence floor)
-            val result = yoloDetector.detectFromImageProxy(imageProxy, confThreshold = 0.65f)
-
-            if (result != null && result.detections.isNotEmpty()) {
-                _uiState.update { it.copy(consecutiveFailedDetections = 0) }
-                handleYoloMultiDetected(result.detections)
-            } else {
-                _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+            // Convert ImageProxy to Bitmap and close buffer immediately for smooth CameraX streaming
+            val bitmap = try {
+                val raw = imageProxy.toBitmap()
+                val rot = imageProxy.imageInfo.rotationDegrees
+                if (rot != 0) {
+                    val mat = android.graphics.Matrix().apply { postRotate(rot.toFloat()) }
+                    android.graphics.Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, mat, true)
+                } else raw
+            } catch (e: Exception) {
+                null
+            } finally {
+                try { imageProxy.close() } catch (_: Exception) {}
             }
+
+            if (bitmap == null) {
+                _uiState.update { it.copy(isProcessingFrame = false) }
+                return@launch
+            }
+
+            // 2. Dual Universal Scanner Pipeline
+            // Step A: Fast on-device packaging brand recognition via ML Kit (<15ms)
+            ocrScanner.processBitmap(
+                bitmap = bitmap,
+                onSuccess = { ocrResult ->
+                    viewModelScope.launch {
+                        val matched = matchOcrProduct(ocrResult)
+                        if (!matched) {
+                            // Step B: YOLO Multi-Object Visual Fallback
+                            val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.65f)
+                            if (result != null && result.detections.isNotEmpty()) {
+                                _uiState.update { it.copy(consecutiveFailedDetections = 0) }
+                                handleYoloMultiDetected(result.detections)
+                            } else {
+                                _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+                            }
+                        }
+                    }
+                },
+                onNotFound = {
+                    // Step B: YOLO Multi-Object Visual Fallback
+                    viewModelScope.launch {
+                        val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.65f)
+                        if (result != null && result.detections.isNotEmpty()) {
+                            _uiState.update { it.copy(consecutiveFailedDetections = 0) }
+                            handleYoloMultiDetected(result.detections)
+                        } else {
+                            _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+                        }
+                    }
+                },
+                onError = {
+                    viewModelScope.launch {
+                        val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.65f)
+                        if (result != null && result.detections.isNotEmpty()) {
+                            _uiState.update { it.copy(consecutiveFailedDetections = 0) }
+                            handleYoloMultiDetected(result.detections)
+                        } else {
+                            _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    private suspend fun matchOcrProduct(ocrResult: OcrResult): Boolean {
+        return try {
+            val products = _uiState.value.inventoryProducts
+            val now = System.currentTimeMillis()
+
+            // 1. Check Store Inventory with High Confidence Threshold
+            val rankedInventoryMatches = ocrScanner.findRankedInventoryMatches(
+                ocrResult = ocrResult,
+                inventoryProducts = products,
+                threshold = 0.60f
+            )
+
+            val currentBilledIds = _uiState.value.currentBill?.items?.map { it.productId }?.toSet() ?: emptySet()
+            val currentBilledNames = _uiState.value.currentBill?.items?.map { it.name.lowercase() }?.toSet() ?: emptySet()
+
+            for (storeMatch in rankedInventoryMatches) {
+                // Suppress if already present in current bill
+                if (currentBilledIds.contains(storeMatch.id) || currentBilledNames.contains(storeMatch.name.lowercase())) {
+                    continue
+                }
+
+                val lastAdded = maxOf(
+                    recentlyAddedTimestampMap[storeMatch.id] ?: 0L,
+                    recentlyAddedTimestampMap[storeMatch.name.lowercase()] ?: 0L
+                )
+
+                val isRecentlyAdded = (now - lastAdded < addedCooldownMs)
+                val isDismissed = (dismissedProductIds.contains(storeMatch.id) || dismissedProductIds.contains(storeMatch.name.lowercase()))
+
+                if (isRecentlyAdded || isDismissed) {
+                    continue
+                }
+
+                // Found high-confidence inventory match
+                _uiState.update {
+                    it.copy(
+                        detectedProduct = storeMatch,
+                        detectedProductsList = listOf(storeMatch),
+                        selectedQuantity = 1,
+                        aiStatus = "⚡ Detected: ${storeMatch.name}",
+                        isProcessingFrame = false
+                    )
+                }
+                return true
+            }
+
+            // 2. Strict Search in 6,000 Master Catalog Reference Items
+            val fullQuery = ocrResult.productName.takeIf { it.isNotBlank() } ?: ocrResult.fullCombinedName
+            val brandTokens = fullQuery.split(" ").filter { it.length >= 3 }
+
+            if (brandTokens.isNotEmpty()) {
+                val brandKeyword = brandTokens.first().lowercase()
+
+                val catalogResult = catalogSearchCache.getOrPut(brandKeyword) {
+                    val remoteRes = productRepository.searchMasterCatalog(brandKeyword).getOrDefault(emptyList())
+                    if (remoteRes.isEmpty() && brandKeyword != fullQuery.lowercase()) {
+                        productRepository.searchMasterCatalog(fullQuery).getOrDefault(emptyList())
+                    } else {
+                        remoteRes
+                    }
+                }
+
+                val rankedCatalogMatches = ocrScanner.findRankedCatalogMatches(
+                    ocrResult = ocrResult,
+                    catalogItems = catalogResult,
+                    threshold = 0.70f
+                )
+
+                for (matchedCatalogItem in rankedCatalogMatches) {
+                    val isDismissed = (dismissedProductIds.contains(matchedCatalogItem.id ?: "") || dismissedProductIds.contains(matchedCatalogItem.name.lowercase()))
+                    if (isDismissed) continue
+
+                    val existingInInventory = products.firstOrNull {
+                        it.name.equals(matchedCatalogItem.name, ignoreCase = true) ||
+                                (!matchedCatalogItem.barcode.isNullOrBlank() && it.barcode == matchedCatalogItem.barcode)
+                    }
+
+                    val targetProduct = existingInInventory ?: Product(
+                        id = matchedCatalogItem.id ?: "CAT_${System.currentTimeMillis()}",
+                        name = matchedCatalogItem.name,
+                        price = matchedCatalogItem.suggestedPrice ?: 10.0,
+                        stock = 50,
+                        category = matchedCatalogItem.category ?: "Grocery",
+                        barcode = matchedCatalogItem.barcode ?: ""
+                    )
+
+                    val lastAdded = maxOf(
+                        recentlyAddedTimestampMap[targetProduct.id] ?: 0L,
+                        recentlyAddedTimestampMap[targetProduct.name.lowercase()] ?: 0L
+                    )
+
+                    if (now - lastAdded < addedCooldownMs) {
+                        _uiState.update { it.copy(isProcessingFrame = false) }
+                        return true
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            detectedProduct = targetProduct,
+                            detectedProductsList = listOf(targetProduct),
+                            selectedQuantity = 1,
+                            aiStatus = "⚡ Catalog: ${targetProduct.name}",
+                            isProcessingFrame = false
+                        )
+                    }
+                    return true
+                }
+            }
+
+            false
+        } catch (ex: Exception) {
+            false
         }
     }
 
     private fun handleOcrDetected(ocrResult: OcrResult) {
         viewModelScope.launch {
-            try {
-                val products = _uiState.value.inventoryProducts
-                val now = System.currentTimeMillis()
-
-                // 1. Check Store Inventory with High Confidence Threshold
-                val rankedInventoryMatches = ocrScanner.findRankedInventoryMatches(
-                    ocrResult = ocrResult,
-                    inventoryProducts = products,
-                    threshold = 0.60f
-                )
-
-                val currentBilledIds = _uiState.value.currentBill?.items?.map { it.productId }?.toSet() ?: emptySet()
-                val currentBilledNames = _uiState.value.currentBill?.items?.map { it.name.lowercase() }?.toSet() ?: emptySet()
-
-                for (storeMatch in rankedInventoryMatches) {
-                    // Suppress if already present in current bill
-                    if (currentBilledIds.contains(storeMatch.id) || currentBilledNames.contains(storeMatch.name.lowercase())) {
-                        continue
-                    }
-
-                    val lastAdded = maxOf(
-                        recentlyAddedTimestampMap[storeMatch.id] ?: 0L,
-                        recentlyAddedTimestampMap[storeMatch.name.lowercase()] ?: 0L
-                    )
-
-                    val isRecentlyAdded = (now - lastAdded < addedCooldownMs)
-                    val isDismissed = (dismissedProductIds.contains(storeMatch.id) || dismissedProductIds.contains(storeMatch.name.lowercase()))
-
-                    if (isRecentlyAdded || isDismissed) {
-                        continue
-                    }
-
-                    // Found high-confidence inventory match
-                    _uiState.update {
-                        it.copy(
-                            detectedProduct = storeMatch,
-                            detectedProductsList = listOf(storeMatch),
-                            selectedQuantity = 1,
-                            aiStatus = "📝 OCR: ${storeMatch.name}",
-                            isProcessingFrame = false
-                        )
-                    }
-                    return@launch
-                }
-
-                // 2. Strict Search in 6,000 Master Catalog Reference Items
-                val fullQuery = ocrResult.productName.takeIf { it.isNotBlank() } ?: ocrResult.fullCombinedName
-                val brandTokens = fullQuery.split(" ").filter { it.length >= 4 }
-
-                if (brandTokens.isNotEmpty()) {
-                    val brandKeyword = brandTokens.first().lowercase()
-
-                    val catalogResult = catalogSearchCache.getOrPut(brandKeyword) {
-                        val remoteRes = productRepository.searchMasterCatalog(brandKeyword).getOrDefault(emptyList())
-                        if (remoteRes.isEmpty() && brandKeyword != fullQuery.lowercase()) {
-                            productRepository.searchMasterCatalog(fullQuery).getOrDefault(emptyList())
-                        } else {
-                            remoteRes
-                        }
-                    }
-
-                    val rankedCatalogMatches = ocrScanner.findRankedCatalogMatches(
-                        ocrResult = ocrResult,
-                        catalogItems = catalogResult,
-                        threshold = 0.75f
-                    )
-
-                    for (matchedCatalogItem in rankedCatalogMatches) {
-                        val isDismissed = (dismissedProductIds.contains(matchedCatalogItem.id ?: "") || dismissedProductIds.contains(matchedCatalogItem.name.lowercase()))
-                        if (isDismissed) continue
-
-                        val existingInInventory = products.firstOrNull {
-                            it.name.equals(matchedCatalogItem.name, ignoreCase = true) ||
-                                    (!matchedCatalogItem.barcode.isNullOrBlank() && it.barcode == matchedCatalogItem.barcode)
-                        }
-
-                        val targetProduct = existingInInventory ?: Product(
-                            id = matchedCatalogItem.id ?: "CAT_${System.currentTimeMillis()}",
-                            name = matchedCatalogItem.name,
-                            price = matchedCatalogItem.suggestedPrice ?: 10.0,
-                            stock = 50,
-                            category = matchedCatalogItem.category ?: "Grocery",
-                            barcode = matchedCatalogItem.barcode ?: ""
-                        )
-
-                        val lastAdded = maxOf(
-                            recentlyAddedTimestampMap[targetProduct.id] ?: 0L,
-                            recentlyAddedTimestampMap[targetProduct.name.lowercase()] ?: 0L
-                        )
-
-                        if (now - lastAdded < addedCooldownMs) {
-                            _uiState.update { it.copy(isProcessingFrame = false) }
-                            return@launch
-                        }
-
-                        _uiState.update {
-                            it.copy(
-                                detectedProduct = targetProduct,
-                                detectedProductsList = listOf(targetProduct),
-                                selectedQuantity = 1,
-                                aiStatus = "📝 Catalog: ${targetProduct.name}",
-                                isProcessingFrame = false
-                            )
-                        }
-                        return@launch
-                    }
-                }
-
-                _uiState.update { it.copy(isProcessingFrame = false) }
-            } catch (ex: Exception) {
-                _uiState.update { it.copy(isProcessingFrame = false) }
-            }
+            matchOcrProduct(ocrResult)
         }
     }
 
@@ -374,6 +414,11 @@ class ScanViewModel(
                         "oreo" -> pName.contains("oreo")
                         "maggi" -> pName.contains("maggi")
                         "jim_jam", "jimjam" -> pName.contains("jim") || pName.contains("jam")
+                        "bourbon", "bourbon_biscuit" -> pName.contains("bourbon")
+                        "nivea", "nivea_deodorant" -> pName.contains("nivea")
+                        "milky_biscuit", "milk_biscuit" -> pName.contains("milk") || pName.contains("milky")
+                        "parle_g", "parleg" -> pName.contains("parle")
+                        "good_day", "goodday" -> pName.contains("good") && pName.contains("day")
                         else -> {
                             val cleanTokens = labelLower.replace("_", " ").split(" ").filter { it.length > 2 }
                             cleanTokens.any { token -> pName.contains(token) }

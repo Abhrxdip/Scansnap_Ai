@@ -74,29 +74,53 @@ def _verify_color_signature(crop_img: Image.Image, label: str) -> bool:
         if total == 0:
             return True
 
-        yellow_pct = (np.sum((h_deg >= 40) & (h_deg <= 75)) / total) * 100
+        yellow_pct = (np.sum((h_deg >= 35) & (h_deg <= 75)) / total) * 100
         green_pct = (np.sum((h_deg >= 80) & (h_deg <= 165)) / total) * 100
-        blue_pct = (np.sum((h_deg >= 180) & (h_deg <= 260)) / total) * 100
+        blue_pct = (np.sum((h_deg >= 170) & (h_deg <= 260)) / total) * 100
+        red_pct = (np.sum((h_deg <= 25) | (h_deg >= 335)) / total) * 100
+        purple_pct = (np.sum((h_deg > 260) & (h_deg < 335)) / total) * 100
 
         lbl = label.lower().strip()
         if lbl == "maggi":
-            # Maggi packaging is bright yellow. Green packets (like Soya Sticks) are rejected instantly.
-            if green_pct > 28.0 and yellow_pct < 35.0:
+            # Maggi packaging is bright yellow. Rejects green or non-yellow packaging.
+            if yellow_pct < 20.0 or green_pct > 25.0:
                 return False
 
-        elif lbl == "surf_excel":
-            # Surf Excel is blue/white/cyan.
-            if yellow_pct > 35.0:
+        elif lbl in ("surf_excel", "surf"):
+            # Surf Excel is distinctly blue/cyan packaging.
+            # Reject immediately if blue is missing or yellow/brown dominates (e.g. Bourbon biscuit).
+            if blue_pct < 12.0 or yellow_pct > 30.0:
+                return False
+
+        elif lbl in ("bourbon", "bourbon_biscuit"):
+            # Bourbon is chocolate brown/dark red.
+            # Reject if bright green, bright yellow, or cyan/blue dominates.
+            if blue_pct > 20.0 or green_pct > 20.0 or yellow_pct > 35.0:
                 return False
 
         elif lbl == "oreo":
-            # Oreo is blue/dark.
-            if green_pct > 40.0:
+            # Oreo packaging is deep royal blue or dark.
+            if green_pct > 25.0 or yellow_pct > 30.0:
                 return False
 
-        elif lbl == "appe_fizz":
-            # Appy Fizz is dark/red/gold.
-            if green_pct > 40.0:
+        elif lbl in ("appe_fizz", "appy_fizz", "appe", "appy"):
+            # Appy Fizz packaging is black, red, and gold.
+            if green_pct > 25.0 or blue_pct > 25.0:
+                return False
+
+        elif lbl in ("hide_and_seek", "hide_seek"):
+            # Hide and Seek is dark purple/chocolate brown.
+            if green_pct > 25.0 or yellow_pct > 30.0:
+                return False
+
+        elif lbl in ("jim_jam", "jimjam"):
+            # Jim Jam is magenta/red and biscuit cream.
+            if green_pct > 25.0 or blue_pct > 25.0:
+                return False
+
+        elif lbl in ("nivea_deodorant", "nivea"):
+            # Nivea is classic navy blue / white / silver.
+            if green_pct > 25.0 or yellow_pct > 30.0:
                 return False
 
         return True

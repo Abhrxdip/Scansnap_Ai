@@ -190,7 +190,7 @@ fun ScanScreen(
                         FilterChip(
                             selected = !uiState.isOcrActive,
                             onClick = { viewModel.toggleScanMode(useOcr = false) },
-                            label = { Text("📷 AI Scanner", fontWeight = FontWeight.Bold) },
+                            label = { Text("⚡ Smart Auto Scanner", fontWeight = FontWeight.Bold) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = BluePrimary,
                                 selectedLabelColor = Color.White
@@ -200,7 +200,7 @@ fun ScanScreen(
                         FilterChip(
                             selected = uiState.isOcrActive,
                             onClick = { viewModel.toggleScanMode(useOcr = true) },
-                            label = { Text("📝 Label OCR", fontWeight = FontWeight.Bold) },
+                            label = { Text("📝 Text Only OCR", fontWeight = FontWeight.Bold) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = BluePrimary,
                                 selectedLabelColor = Color.White
