@@ -8,7 +8,8 @@ import {
   Store, 
   Radio, 
   ChevronRight,
-  TrendingUp
+  TrendingUp,
+  Tag
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
@@ -16,7 +17,8 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard, badge: 'Live' },
     { id: 'inventory', label: 'Master Inventory', icon: Package },
     { id: 'bills', label: 'Invoice Archive', icon: Receipt },
-    { id: 'ai-studio', label: 'Visual AI Studio', icon: Sparkles, badge: 'YOLOv8' },
+    { id: 'offers', label: 'Festivals & Combos', icon: Tag, badge: 'Smart AI' },
+    { id: 'ai-studio', label: 'Visual AI Studio', icon: Sparkles, badge: 'YOLOv11' },
     { id: 'settings', label: 'Store & Terminals', icon: Sliders },
   ];
 

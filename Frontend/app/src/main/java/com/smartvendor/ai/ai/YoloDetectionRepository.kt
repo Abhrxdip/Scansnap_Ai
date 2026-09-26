@@ -28,7 +28,7 @@ class YoloDetectionRepository {
      */
     suspend fun detectFromImageProxy(
         imageProxy: ImageProxy,
-        confThreshold: Float = 0.65f
+        confThreshold: Float = 0.30f
     ): YoloDetectResponse? = withContext(Dispatchers.IO) {
         try {
             val bitmap = imageProxyToRotatedBitmap(imageProxy) ?: return@withContext null

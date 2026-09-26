@@ -12,7 +12,7 @@ CATEGORIES_AND_ITEMS = [
     {
         "category": "Dairy & Bakery",
         "brands": ["Amul", "Mother Dairy", "Nandini", "Gowardhan", "Nestle", "Epigamia", "Britannia", "Milky Mist"],
-        "items": ["Taaza Toned Milk", "Gold Full Cream Milk", "Fresh Dahi", "Paneer", "Butter", "Cheese Slices", "Cheese Block", "Flavoured Milk", "Fresh Cream", "Ghee", "Bread White", "Brown Bread"],
+        "items": ["Taaza Toned Milk", "Gold Full Cream Milk", "Fresh Dahi", "Paneer", "Butter", "Cheese Slices", "Cheese Block", "Flavoured Milk", "Fresh Cream", "Ghee", "Bread White", "Brown Bread", "Ice Cream Cup Vanilla Magic", "Treat Chocolate Cake", "Everyday Dairy Whitener Milk Powder"],
         "units": ["100g", "200g", "250g", "500g", "1kg", "200ml", "500ml", "1L"]
     },
     {
@@ -48,7 +48,7 @@ CATEGORIES_AND_ITEMS = [
     {
         "category": "Beverages & Drinks",
         "brands": ["Coca-Cola", "Thums Up", "Sprite", "Limca", "Fanta", "Pepsi", "Seven Up", "Maaza", "Slice", "Frooti", "Real", "Paper Boat", "Red Bull", "Monster", "Tata Tea", "Red Label", "Taj Mahal", "Nescafe", "Bru"],
-        "items": ["Carbonated Soft Drink", "Mango Drink", "Mixed Fruit Juice", "Apple Juice", "Aamras", "Energy Drink", "Gold Premium Tea", "Instant Coffee", "Classic Coffee", "Green Tea Bags"],
+        "items": ["Carbonated Soft Drink", "Mango Drink", "Mixed Fruit Juice", "Apple Juice", "Aamras", "Energy Drink", "Gold Premium Tea", "Instant Coffee", "Classic Coffee", "Green Tea Bags", "Charged Cold Drink Can"],
         "units": ["200ml", "250ml", "500ml", "600ml", "1.25L", "2L", "100g", "250g", "500g"]
     },
     {
@@ -59,8 +59,8 @@ CATEGORIES_AND_ITEMS = [
     },
     {
         "category": "Personal Care & Hygiene",
-        "brands": ["Dettol", "Lifebuoy", "Dove", "Pears", "Lux", "Santoor", "Colgate", "Pepsodent", "Sensodyne", "Dabur", "Closeup", "Parachute", "Clinic Plus", "Sunsilk", "Head & Shoulders", "Nivea", "Himalaya", "Vaseline"],
-        "items": ["Antiseptic Soap", "Moisturizing Soap", "Strong Teeth Toothpaste", "Red Toothpaste", "Fresh Gel Toothpaste", "Coconut Hair Oil", "Health Shampoo", "Anti Hairfall Shampoo", "Face Wash Purifying Neem", "Body Lotion", "Petroleum Jelly"],
+        "brands": ["Dettol", "Lifebuoy", "Dove", "Pears", "Lux", "Santoor", "Colgate", "Pepsodent", "Sensodyne", "Dabur", "Closeup", "Parachute", "Clinic Plus", "Sunsilk", "Head & Shoulders", "Nivea", "Himalaya", "Vaseline", "CeraVe", "Plum", "Wild Stone"],
+        "items": ["Antiseptic Soap", "Moisturizing Soap", "Strong Teeth Toothpaste", "Red Toothpaste", "Fresh Gel Toothpaste", "Coconut Hair Oil", "Health Shampoo", "Anti Hairfall Shampoo", "Face Wash Purifying Neem", "Body Lotion", "Petroleum Jelly", "Daily Moisturizing Lotion", "Green Tea Face Wash", "Code Platinum Body Perfume Spray"],
         "units": ["75g", "100g", "125g", "150g", "200g", "100ml", "180ml", "340ml", "650ml"]
     },
     {

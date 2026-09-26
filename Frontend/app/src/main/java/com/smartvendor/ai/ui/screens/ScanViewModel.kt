@@ -384,6 +384,16 @@ class ScanViewModel(
                     "jim_jam" -> "Jim Jam"
                     "oreo" -> "Oreo"
                     "maggi" -> "Maggi"
+                    "bourbon", "bourbon_biscuit" -> "Bourbon"
+                    "nivea", "nivea_deodorant" -> "Nivea"
+                    "amul_ice_cream" -> "Amul Ice Cream"
+                    "cake" -> "Britannia Cake"
+                    "cerave" -> "CeraVe Lotion"
+                    "hns_shampoo" -> "Head & Shoulders Shampoo"
+                    "nestle_milk_powder" -> "Nestle Milk Powder"
+                    "plum" -> "Plum Skincare"
+                    "thums_up" -> "Thums Up"
+                    "wild_stone" -> "Wild Stone Deodorant"
                     else -> det.label.replace("_", " ")
                 }
                 DetectionResult(
@@ -400,9 +410,9 @@ class ScanViewModel(
 
             val matchedList = mutableListOf<Product>()
             for (det in detections) {
-                // Strict confidence gating: ignore weak out-of-domain predictions (e.g. Soya Sticks confused as Maggi)
-                if (det.confidence < 0.65f) continue
-                if (det.label.lowercase().trim() == "maggi" && det.confidence < 0.70f) continue
+                // Multi-product confidence gating: capture all clear objects in view (threshold 0.35)
+                if (det.confidence < 0.35f) continue
+                if (det.label.lowercase().trim() == "maggi" && det.confidence < 0.55f) continue
 
                 val labelLower = det.label.lowercase().trim()
                 val matched = products.firstOrNull { product ->
@@ -419,6 +429,14 @@ class ScanViewModel(
                         "milky_biscuit", "milk_biscuit" -> pName.contains("milk") || pName.contains("milky")
                         "parle_g", "parleg" -> pName.contains("parle")
                         "good_day", "goodday" -> pName.contains("good") && pName.contains("day")
+                        "amul_ice_cream", "amul_icecream" -> pName.contains("amul") && (pName.contains("ice") || pName.contains("cream"))
+                        "cake", "britannia_cake", "treat_cake" -> pName.contains("cake")
+                        "cerave", "cerave_lotion", "cerave_cream" -> pName.contains("cerave")
+                        "hns_shampoo", "head_and_shoulders", "head_shoulders", "hns" -> (pName.contains("head") && pName.contains("shoulders")) || pName.contains("hns")
+                        "nestle_milk_powder", "milk_powder", "everyday_milk" -> (pName.contains("nestle") && pName.contains("milk")) || pName.contains("dairy whitener")
+                        "plum", "plum_skincare" -> pName.contains("plum")
+                        "thums_up", "thumsup" -> pName.contains("thums") && pName.contains("up")
+                        "wild_stone", "wildstone" -> pName.contains("wild") && pName.contains("stone")
                         else -> {
                             val cleanTokens = labelLower.replace("_", " ").split(" ").filter { it.length > 2 }
                             cleanTokens.any { token -> pName.contains(token) }

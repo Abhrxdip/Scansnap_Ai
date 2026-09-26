@@ -284,20 +284,48 @@ export default function BillsPage({ selectedBill, setSelectedBill }) {
                 </div>
               </div>
 
+              <div style={{ textAlign: 'center', marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed #000' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '6px' }}>
+                  ⚡ Instant UPI Payment QR
+                </div>
+                <div style={{ display: 'inline-block', padding: '6px', background: '#FFFFFF', border: '2px solid #000', borderRadius: '8px' }}>
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`upi://pay?pa=smartvendor@upi&pn=ScanSnap+Retail&am=${Number(selectedBill.total_amount || 0).toFixed(2)}&cu=INR&tn=${selectedBill.bill_number}`)}`} 
+                    alt="UPI QR Code" 
+                    style={{ width: '110px', height: '110px', display: 'block' }}
+                  />
+                </div>
+                <p style={{ fontSize: '10px', fontWeight: 800, color: '#374151', marginTop: '4px' }}>
+                  Scan with GPay / PhonePe / Paytm / BHIM
+                </p>
+              </div>
+
               <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px' }}>
-                <p><strong>Payment Mode:</strong> {selectedBill.payment_mode || 'CASH'} - PAID</p>
+                <p><strong>Payment Mode:</strong> {selectedBill.payment_mode || 'UPI / CASH'} - VERIFIED</p>
                 <p style={{ marginTop: '4px' }}>Thank you for shopping at ScanSnap AI!</p>
                 <p>*** Powered by Computer Vision POS ***</p>
               </div>
             </div>
 
-            <div className="modal-footer">
-              <button onClick={() => setSelectedBill(null)} className="neu-btn">
-                Close
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+              <button 
+                onClick={() => {
+                  const billText = `🧾 *ScanSnap AI Supermarket Receipt*\nInv: ${selectedBill.bill_number}\nDate: ${new Date().toLocaleDateString('en-IN')}\nTotal Items: ${(selectedBill.items || []).length}\n*Grand Total: ₹${Number(selectedBill.total_amount || 0).toFixed(2)}*\nStatus: Paid via ${selectedBill.payment_mode || 'UPI'}\n\n_Thank you for visiting! Powered by ScanSnap AI._`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(billText)}`, '_blank');
+                }}
+                className="neu-btn"
+                style={{ background: '#25D366', color: '#FFFFFF', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                💬 Send WhatsApp
               </button>
-              <button onClick={handlePrint} className="neu-btn neu-btn-primary">
-                <Printer size={15} /> Print Invoice
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setSelectedBill(null)} className="neu-btn">
+                  Close
+                </button>
+                <button onClick={handlePrint} className="neu-btn neu-btn-primary">
+                  <Printer size={15} /> Print Thermal
+                </button>
+              </div>
             </div>
           </div>
         </div>

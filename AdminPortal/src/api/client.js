@@ -57,13 +57,52 @@ export async function searchMasterCatalog(query) {
   return res.json();
 }
 
-export async function detectObjectsInImage(file) {
+export async function detectObjectsInImage(file, conf = 0.25) {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('conf', conf);
   const res = await fetch(`${API_BASE}/detect/image`, {
     method: 'POST',
     body: formData,
   });
   if (!res.ok) throw new Error('Detection failed');
+  return res.json();
+}
+
+// ─── Offers & Smart Combos API ──────────────────────────────────────────────
+
+export async function fetchFestivals() {
+  const res = await fetch(`${API_BASE}/offers/festivals`);
+  if (!res.ok) throw new Error('Failed to fetch festival discounts');
+  return res.json();
+}
+
+export async function overrideFestival(festivalName) {
+  const res = await fetch(`${API_BASE}/offers/override-festival`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ festival_name: festivalName }),
+  });
+  if (!res.ok) throw new Error('Failed to override festival');
+  return res.json();
+}
+
+export async function fetchCombos() {
+  const res = await fetch(`${API_BASE}/offers/combos`);
+  if (!res.ok) throw new Error('Failed to fetch smart combos');
+  return res.json();
+}
+
+export async function calculateCartOffers(items, applyFestival = true, applyCombos = true) {
+  const res = await fetch(`${API_BASE}/offers/calculate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      items,
+      apply_festival: applyFestival,
+      apply_combos: applyCombos,
+    }),
+  });
+  if (!res.ok) throw new Error('Failed to calculate offers');
   return res.json();
 }

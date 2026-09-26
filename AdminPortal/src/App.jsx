@@ -6,6 +6,7 @@ import InventoryPage from './pages/InventoryPage';
 import BillsPage from './pages/BillsPage';
 import AiStudioPage from './pages/AiStudioPage';
 import SettingsPage from './pages/SettingsPage';
+import OffersPage from './pages/OffersPage';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -26,9 +27,13 @@ export default function App() {
       title: 'Invoice & Billing Archive',
       subtitle: 'Search past customer orders, generate GST tax receipts & audits',
     },
+    offers: {
+      title: 'Festivals & Dynamic Combos',
+      subtitle: '9 Indian festival discounts, smart FMCG upsell packages & margin simulator',
+    },
     'ai-studio': {
       title: 'Visual AI Studio & Test Bench',
-      subtitle: 'YOLOv8 retail detection pipeline, test image bench & class manager',
+      subtitle: 'YOLOv11 retail detection pipeline, test image bench & class manager',
     },
     settings: {
       title: 'Store & POS Terminal Settings',
@@ -80,6 +85,10 @@ export default function App() {
               selectedBill={selectedBill} 
               setSelectedBill={setSelectedBill} 
             />
+          )}
+
+          {activeTab === 'offers' && (
+            <OffersPage />
           )}
 
           {activeTab === 'ai-studio' && (

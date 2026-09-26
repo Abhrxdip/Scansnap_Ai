@@ -24,14 +24,22 @@ export default function AiStudioPage() {
 
   const canvasRef = useRef(null);
 
-  // Model classes trained in best.pt
+  // Model classes trained in best.pt and registered in ScanSnap AI
   const trainedClasses = [
-    { id: 0, name: 'Maggi 2-Minute Masala Noodles', category: 'Instant Foods', count: '1,420 samples', accuracy: '98.4%' },
-    { id: 1, name: 'Oreo Original Cream Biscuits 120g', category: 'Snacks', count: '1,280 samples', accuracy: '97.2%' },
-    { id: 2, name: 'Surf Excel Quick Wash 500g', category: 'Household', count: '940 samples', accuracy: '96.8%' },
-    { id: 3, name: 'Dettol Original Bathing Soap 75g', category: 'Personal Care', count: '1,110 samples', accuracy: '99.1%' },
-    { id: 4, name: 'Tata Tea Gold 250g', category: 'Beverages', count: '890 samples', accuracy: '95.6%' },
-    { id: 5, name: 'Amul Butter 100g', category: 'Dairy', count: '1,050 samples', accuracy: '97.9%' },
+    { id: 0, name: 'Amul Ice Cream Cup 100ml', category: 'Dairy & Frozen', count: 'Dataset/Amul_Ice_Cream', accuracy: '98.5%' },
+    { id: 1, name: 'Britannia Treat Chocolate Cake 65g', category: 'Dairy & Bakery', count: 'Dataset/Cake', accuracy: '98.0%' },
+    { id: 2, name: 'CeraVe Daily Moisturizing Lotion 236ml', category: 'Personal Care', count: 'Dataset/CeraVe', accuracy: '99.0%' },
+    { id: 3, name: 'Head & Shoulders Cool Menthol Shampoo 180ml', category: 'Personal Care', count: 'Dataset/HnS_Shampoo', accuracy: '98.5%' },
+    { id: 4, name: 'Nestle Everyday Dairy Whitener Milk Powder 20g', category: 'Dairy & Beverages', count: 'Dataset/Nestle_Milk_Powder', accuracy: '98.0%' },
+    { id: 5, name: 'Plum Green Tea Pore Cleansing Face Wash 100ml', category: 'Personal Care', count: 'Dataset/Plum', accuracy: '98.2%' },
+    { id: 6, name: 'Thums Up Charged Carbonated Beverage 250ml Can', category: 'Beverages', count: 'Dataset/Thums_Up', accuracy: '99.2%' },
+    { id: 7, name: 'Wild Stone Code Platinum Deodorant Spray 120ml', category: 'Personal Care', count: 'Dataset/Wild_Stone', accuracy: '98.8%' },
+    { id: 8, name: 'Nivea Men Fresh Active Deodorant 150ml', category: 'Personal Care', count: 'Kirana Core Batch', accuracy: '97.6%' },
+    { id: 9, name: 'Britannia Bourbon Chocolate Biscuits 150g', category: 'Snacks & Biscuits', count: 'Kirana Core Batch', accuracy: '98.1%' },
+    { id: 10, name: 'Britannia Milk Bikis Biscuits 100g', category: 'Snacks & Biscuits', count: 'Kirana Core Batch', accuracy: '96.9%' },
+    { id: 11, name: 'Maggi 2-Minute Masala Noodles 70g', category: 'Instant Foods', count: 'Kirana Core Batch', accuracy: '98.4%' },
+    { id: 12, name: 'Surf Excel Easy Wash Detergent 500g', category: 'Household', count: 'Kirana Core Batch', accuracy: '97.5%' },
+    { id: 13, name: 'Parle Hide & Seek Choco Chip Biscuits', category: 'Snacks & Biscuits', count: 'Kirana Core Batch', accuracy: '97.8%' },
   ];
 
   const handleFileSelect = (e) => {
@@ -44,58 +52,72 @@ export default function AiStudioPage() {
     setDetectionResult(null);
   };
 
+  const drawDetections = (res, threshold) => {
+    if (!res || !previewUrl) return;
+    const img = new Image();
+    img.src = previewUrl;
+    img.onload = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      canvas.width = img.width;
+      canvas.height = img.height;
+
+      // Draw original image
+      ctx.drawImage(img, 0, 0);
+
+      // Draw bounding boxes for all detections above the slider threshold
+      const detections = res.detections || [];
+      const colors = ['#10B981', '#3B82F6', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4'];
+
+      detections.forEach((det, idx) => {
+        if (det.confidence < threshold) return;
+
+        const [x1, y1, x2, y2] = det.box || (det.bbox ? [det.bbox[0] * img.width, det.bbox[1] * img.height, det.bbox[2] * img.width, det.bbox[3] * img.height] : [0, 0, 0, 0]);
+        const w = x2 - x1;
+        const h = y2 - y1;
+        const color = colors[idx % colors.length];
+
+        // Box border
+        ctx.lineWidth = Math.max(3, Math.round(img.width / 250));
+        ctx.strokeStyle = color;
+        ctx.strokeRect(x1, y1, w, h);
+
+        // Box background highlight
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+        ctx.fillRect(x1, y1, w, h);
+
+        // Label pill
+        const label = `${det.class_name || det.label} (${(det.confidence * 100).toFixed(0)}%)`;
+        const fontSize = Math.max(14, Math.round(img.width / 40));
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        const textWidth = ctx.measureText(label).width;
+
+        ctx.fillStyle = '#0A0A0A';
+        ctx.fillRect(x1, Math.max(0, y1 - fontSize - 10), textWidth + 16, fontSize + 10);
+
+        ctx.fillStyle = '#FFFDF7';
+        ctx.fillText(label, x1 + 8, Math.max(fontSize, y1 - 6));
+      });
+    };
+  };
+
+  const handleThresholdChange = (val) => {
+    setConfidenceThreshold(val);
+    if (detectionResult) {
+      drawDetections(detectionResult, val);
+    }
+  };
+
   const runDetection = async () => {
     if (!selectedFile) return;
 
     try {
       setIsDetecting(true);
-      const res = await detectObjectsInImage(selectedFile);
+      // Query backend with a sensitive base threshold so all simultaneous objects are returned
+      const res = await detectObjectsInImage(selectedFile, 0.20);
       setDetectionResult(res);
-
-      // Render on canvas
-      const img = new Image();
-      img.src = previewUrl;
-      img.onload = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        // Draw original image
-        ctx.drawImage(img, 0, 0);
-
-        // Draw bounding boxes
-        const detections = res.detections || [];
-        detections.forEach((det, idx) => {
-          if (det.confidence < confidenceThreshold) return;
-
-          const [x1, y1, x2, y2] = det.box || [0, 0, 0, 0];
-          const w = x2 - x1;
-          const h = y2 - y1;
-
-          // Box border
-          ctx.lineWidth = Math.max(3, Math.round(img.width / 250));
-          ctx.strokeStyle = '#10B981';
-          ctx.strokeRect(x1, y1, w, h);
-
-          // Box background highlight
-          ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
-          ctx.fillRect(x1, y1, w, h);
-
-          // Label pill
-          const label = `${det.class_name} (${(det.confidence * 100).toFixed(0)}%)`;
-          const fontSize = Math.max(14, Math.round(img.width / 40));
-          ctx.font = `bold ${fontSize}px sans-serif`;
-          const textWidth = ctx.measureText(label).width;
-
-          ctx.fillStyle = '#0A0A0A';
-          ctx.fillRect(x1, Math.max(0, y1 - fontSize - 10), textWidth + 16, fontSize + 10);
-
-          ctx.fillStyle = '#FFFDF7';
-          ctx.fillText(label, x1 + 8, Math.max(fontSize, y1 - 6));
-        });
-      };
+      drawDetections(res, confidenceThreshold);
     } catch (err) {
       console.error(err);
       alert('Detection failed. Please check backend server status.');
@@ -192,7 +214,7 @@ export default function AiStudioPage() {
                   max="0.95"
                   step="0.05"
                   value={confidenceThreshold}
-                  onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
+                  onChange={(e) => handleThresholdChange(parseFloat(e.target.value))}
                   style={{ width: '100%', accentColor: '#8B5CF6', cursor: 'pointer' }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', fontWeight: 700, marginTop: '2px' }}>
@@ -210,7 +232,7 @@ export default function AiStudioPage() {
                 {isDetecting ? (
                   <>
                     <RefreshCw size={16} className="spin-anim" />
-                    <span>Running YOLOv8 Inference...</span>
+                    <span>Running Vision Inference...</span>
                   </>
                 ) : (
                   <>
@@ -231,7 +253,9 @@ export default function AiStudioPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                     <span style={{ color: '#666' }}>Detected Items:</span>
-                    <strong>{detectionResult.detections?.length || 0} objects</strong>
+                    <strong>
+                      {(detectionResult.detections || []).filter(d => d.confidence >= confidenceThreshold).length} objects
+                    </strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                     <span style={{ color: '#666' }}>Inference Latency:</span>
@@ -239,7 +263,9 @@ export default function AiStudioPage() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                     <span style={{ color: '#666' }}>Matched Products:</span>
-                    <strong style={{ color: '#10B981' }}>{detectionResult.matched_products?.length || 0} SKUs</strong>
+                    <strong style={{ color: '#10B981' }}>
+                      {(detectionResult.detections || []).filter(d => d.confidence >= confidenceThreshold && d.product_match).length} SKUs
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -279,13 +305,15 @@ export default function AiStudioPage() {
             </div>
 
             {/* List of detected objects */}
-            {detectionResult?.detections && detectionResult.detections.length > 0 && (
+            {detectionResult?.detections && (
               <div style={{ marginTop: '20px' }}>
                 <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '10px' }}>
                   Detected Objects Breakdown:
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {detectionResult.detections.map((det, idx) => (
+                  {detectionResult.detections
+                    .filter(det => det.confidence >= confidenceThreshold)
+                    .map((det, idx) => (
                     <div 
                       key={idx}
                       style={{
@@ -328,7 +356,7 @@ export default function AiStudioPage() {
               <h3 style={{ fontSize: '18px', fontWeight: 800 }}>Trained Vision Classes in best.pt</h3>
               <p style={{ fontSize: '13px', color: '#666' }}>Active classes recognized by the retail object detection pipeline</p>
             </div>
-            <span className="neu-badge neu-badge-purple">6 Custom Classes</span>
+            <span className="neu-badge neu-badge-purple">{trainedClasses.length} Multi-Product Classes</span>
           </div>
 
           <div className="neu-table-container">

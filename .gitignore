@@ -15,12 +15,15 @@ __pycache__/
 *.cache
 **/*.cache
 
-# AI & Training Artifacts
+# AI & Training Artifacts & Datasets
 AI/.venv/
 AI/runs/
 AI/models/
 AI/datasets/
 AI/dataset/**/images/
+AI/dataset/grocery/augmented_retail/
+AI/dataset/grocery/retail_8class/
+AI/dataset/grocery/unified_retail/
 runs/
 
 # Gradle & Android Build

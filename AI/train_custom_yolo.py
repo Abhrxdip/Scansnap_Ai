@@ -68,7 +68,9 @@ def train_yolo(
         exist_ok=True,
         plots=True,
         save=True,
-        verbose=True
+        verbose=True,
+        workers=0,
+        patience=12
     )
 
     best_weights_path = ai_dir / project_name / run_name / "weights" / "best.pt"
@@ -82,17 +84,17 @@ def train_yolo(
             target_pt = backend_model_dir / "best.pt"
             shutil.copy2(best_weights_path, target_pt)
             print(f"📦 Deployed best weights directly to backend: {target_pt}")
-            print(f"   Now restart FastAPI server to load the new model with Bourbon support!")
+            print(f"   Now restart FastAPI server to load the new model with retail FMCG support!")
     else:
         print(f"⚠️ Warning: best.pt was not found at {best_weights_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train custom YOLO model for ScanSnap AI")
-    parser.add_argument("--data", type=str, default="dataset/grocery/pilot_batch_001_yolo/data.yaml", help="Path to data.yaml")
+    parser.add_argument("--data", type=str, default="dataset/grocery/augmented_retail/data.yaml", help="Path to data.yaml")
     parser.add_argument("--model", type=str, default="yolo11n.pt", help="Base model weights")
-    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
-    parser.add_argument("--batch", type=int, default=8, help="Batch size (e.g. 8 for CPU, 16/32 for GPU)")
-    parser.add_argument("--imgsz", type=int, default=416, help="Image resolution for training")
+    parser.add_argument("--epochs", type=int, default=25, help="Number of training epochs")
+    parser.add_argument("--batch", type=int, default=16, help="Batch size (e.g. 16 for CPU)")
+    parser.add_argument("--imgsz", type=int, default=384, help="Image resolution for training")
     parser.add_argument("--device", type=str, default="cpu", help="Device: 'cpu' or '0' (for CUDA GPU)")
     parser.add_argument("--export_best", action="store_true", default=True, help="Automatically copy best.pt to backend/models/best.pt")
 
