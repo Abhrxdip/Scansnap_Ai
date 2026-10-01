@@ -83,15 +83,16 @@ class MasterCatalogResponse(BaseModel):
 class BillItemCreate(BaseModel):
     product_id: Optional[str] = None
     product_name: str
-    quantity: int
+    quantity: int = Field(..., ge=1)
     unit_price: float
     total_price: float
 
 
 class BillCreate(BaseModel):
+    idempotency_key: Optional[str] = None
     items: List[BillItemCreate]
     total_amount: float
-    tax_amount: float = 0.0
+    tax_amount: float = Field(0.0, ge=0.0)
     payment_mode: str = "cash"
 
 

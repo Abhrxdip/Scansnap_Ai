@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Package, 
   Search, 
@@ -70,7 +70,12 @@ export default function InventoryPage() {
     try {
       setLoading(true);
       const data = await fetchProducts();
-      setProducts(data);
+      const mappedData = data.map(p => ({
+        ...p,
+        stock_quantity: p.stock ?? p.stock_quantity ?? 0,
+        reorder_level: p.low_stock_threshold ?? p.reorder_level ?? 5,
+      }));
+      setProducts(mappedData);
     } catch (err) {
       console.error(err);
       showToast('Error loading inventory products', 'error');
@@ -134,9 +139,9 @@ export default function InventoryPage() {
       category: prod.category || 'Groceries',
       price: prod.price || '',
       cost_price: prod.cost_price || '',
-      stock_quantity: prod.stock_quantity || 0,
+      stock_quantity: prod.stock ?? prod.stock_quantity ?? 0,
       unit: prod.unit || 'pcs',
-      reorder_level: prod.reorder_level || 5,
+      reorder_level: prod.low_stock_threshold ?? prod.reorder_level ?? 5,
     });
     setIsAddEditOpen(true);
   };
@@ -153,9 +158,11 @@ export default function InventoryPage() {
         ...formData,
         price: parseFloat(formData.price),
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : 0,
-        stock_quantity: parseInt(formData.stock_quantity, 10) || 0,
-        reorder_level: parseInt(formData.reorder_level, 10) || 5,
+        stock: parseInt(formData.stock_quantity, 10) || 0,
+        low_stock_threshold: parseInt(formData.reorder_level, 10) || 5,
       };
+      delete payload.stock_quantity;
+      delete payload.reorder_level;
 
       if (editingProduct) {
         await updateProduct(editingProduct.id, payload);
@@ -192,8 +199,12 @@ export default function InventoryPage() {
     const newQty = Math.max(0, (prod.stock_quantity || 0) + delta);
     try {
       // Optimistic update
-      setProducts(prev => prev.map(p => p.id === prod.id ? { ...p, stock_quantity: newQty } : p));
-      await updateProduct(prod.id, { ...prod, stock_quantity: newQty });
+      setProducts(prev => prev.map(p => p.id === prod.id ? { ...p, stock_quantity: newQty, stock: newQty } : p));
+      
+      const payload = { ...prod, stock: newQty, low_stock_threshold: prod.low_stock_threshold ?? prod.reorder_level ?? 5 };
+      delete payload.stock_quantity;
+      delete payload.reorder_level;
+      await updateProduct(prod.id, payload);
     } catch (err) {
       console.error(err);
       loadProducts();
@@ -225,11 +236,11 @@ export default function InventoryPage() {
         barcode: catItem.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
         brand: catItem.brand || '',
         category: catItem.category || 'Groceries',
-        price: parseFloat(catItem.mrp || catItem.price || 40),
+        price: parseFloat(catItem.suggested_price ?? catItem.mrp ?? catItem.price ?? 40),
         cost_price: parseFloat(catItem.cost_price || (catItem.mrp ? catItem.mrp * 0.8 : 32)),
-        stock_quantity: 50,
+        stock: 50,
         unit: catItem.unit || 'pcs',
-        reorder_level: 5,
+        low_stock_threshold: 5,
       };
 
       await createProduct(payload);
@@ -326,7 +337,14 @@ export default function InventoryPage() {
 
     for (const item of csvPreview) {
       try {
-        await createProduct(item);
+        const payload = {
+          ...item,
+          stock: parseInt(item.stock_quantity, 10) || 0,
+          low_stock_threshold: parseInt(item.reorder_level, 10) || 5,
+        };
+        delete payload.stock_quantity;
+        delete payload.reorder_level;
+        await createProduct(payload);
         successCount++;
       } catch (err) {
         console.warn('Skipped duplicate or error:', item.name);
@@ -363,7 +381,7 @@ export default function InventoryPage() {
         <div className="neu-box" style={{ padding: '16px 20px', background: '#FFF' }}>
           <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#666' }}>Stock Valuation (Retail)</span>
           <div style={{ fontSize: '26px', fontWeight: 900, fontFamily: 'var(--font-heading)', marginTop: '4px', color: '#1D4ED8' }}>
-            ₹{totalValuation.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            â‚¹{totalValuation.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </div>
         </div>
 
@@ -493,12 +511,12 @@ export default function InventoryPage() {
                     </td>
                     <td>
                       <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 900, fontSize: '15px' }}>
-                        ₹{Number(p.price || 0).toFixed(2)}
+                        â‚¹{Number(p.price || 0).toFixed(2)}
                       </span>
                     </td>
                     <td>
                       <div style={{ fontSize: '13px', color: '#555', fontWeight: 600 }}>
-                        ₹{Number(p.cost_price || 0).toFixed(2)}
+                        â‚¹{Number(p.cost_price || 0).toFixed(2)}
                       </div>
                       <span style={{ fontSize: '10px', fontWeight: 800, color: '#059669' }}>
                         {margin}% margin
@@ -614,7 +632,7 @@ export default function InventoryPage() {
                   </label>
                   <input 
                     type="text"
-                    placeholder="e.g. Nestlé, Amul, Britannia"
+                    placeholder="e.g. NestlÃ©, Amul, Britannia"
                     value={formData.brand}
                     onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
                     className="neu-input"
@@ -642,7 +660,7 @@ export default function InventoryPage() {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Selling Price (₹ MRP) *
+                    Selling Price (â‚¹ MRP) *
                   </label>
                   <input 
                     type="number"
@@ -657,7 +675,7 @@ export default function InventoryPage() {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Cost Price (₹)
+                    Cost Price (â‚¹)
                   </label>
                   <input 
                     type="number"
@@ -804,7 +822,7 @@ export default function InventoryPage() {
                           <tr key={i}>
                             <td style={{ fontWeight: 700 }}>{r.name}</td>
                             <td>{r.barcode}</td>
-                            <td>₹{r.price}</td>
+                            <td>â‚¹{r.price}</td>
                             <td>{r.stock_quantity}</td>
                           </tr>
                         ))}
@@ -909,7 +927,7 @@ export default function InventoryPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontSize: '16px', fontWeight: 900, fontFamily: 'var(--font-heading)' }}>
-                              ₹{Number(item.mrp || item.price || 50).toFixed(2)}
+                              â‚¹{Number(item.suggested_price ?? item.mrp ?? item.price ?? 50).toFixed(2)}
                             </div>
                             <span style={{ fontSize: '10px', color: '#666' }}>Standard MRP</span>
                           </div>
@@ -939,3 +957,4 @@ export default function InventoryPage() {
     </div>
   );
 }
+

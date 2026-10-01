@@ -38,6 +38,7 @@ def _get_model():
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 from pydantic import BaseModel
+from auth import CurrentUser
 
 
 class Detection(BaseModel):
@@ -76,15 +77,44 @@ FRIENDLY_NAMES = {
 }
 
 
-def _match_db_product(label: str) -> Optional[dict]:
+def _match_db_product(label: str, user_id: str) -> Optional[dict]:
     try:
         from database import SessionLocal
         import models
         db = SessionLocal()
         try:
+            normalized_label = label.lower().strip()
+            
+            def format_prod(p):
+                return {
+                    "id": p.id,
+                    "name": p.name,
+                    "price": p.price,
+                    "stock": p.stock,
+                    "category": p.category,
+                    "barcode": p.barcode
+                }
+
+            explicit_name = FRIENDLY_NAMES.get(normalized_label)
+            if explicit_name:
+                prod = db.query(models.Product).filter(
+                    models.Product.name.ilike(explicit_name),
+                    models.Product.user_id == user_id
+                ).first()
+                if prod:
+                    return format_prod(prod)
+
+            normalized_name_str = normalized_label.replace("_", " ")
+            prod = db.query(models.Product).filter(
+                models.Product.name.ilike(normalized_name_str),
+                models.Product.user_id == user_id
+            ).first()
+            if prod:
+                return format_prod(prod)
+
             keywords_map = {
                 "amul_ice_cream": ["Amul", "Ice Cream"],
-                "cake": ["Cake"],
+                "cake": ["Britannia", "Cake"],
                 "cerave": ["CeraVe"],
                 "hns_shampoo": ["Head & Shoulders", "Shampoo"],
                 "nestle_milk_powder": ["Nestle", "Milk Powder"],
@@ -92,29 +122,24 @@ def _match_db_product(label: str) -> Optional[dict]:
                 "thums_up": ["Thums Up"],
                 "wild_stone": ["Wild Stone"],
                 "nivea_deodorant": ["Nivea"],
-                "bourbon_biscuit": ["Bourbon"],
-                "milky_biscuit": ["Milk"],
-                "maggi": ["Maggi"],
-                "surf_excel": ["Surf"],
-                "hide_and_seek": ["Hide"],
+                "bourbon_biscuit": ["Bourbon", "Biscuit"],
+                "milky_biscuit": ["Milk", "Bikis"],
+                "maggi": ["Maggi", "Noodles"],
+                "surf_excel": ["Surf", "Excel"],
+                "hide_and_seek": ["Hide", "Seek"],
                 "oreo": ["Oreo"],
                 "appe_fizz": ["Appy"],
-                "jim_jam": ["Jim"]
+                "jim_jam": ["Jim", "Jam"]
             }
-            kws = keywords_map.get(label.lower().strip(), [label])
-            query = db.query(models.Product)
+            kws = keywords_map.get(normalized_label, [normalized_name_str])
+            query = db.query(models.Product).filter(models.Product.user_id == user_id)
             for kw in kws:
                 query = query.filter(models.Product.name.ilike(f"%{kw}%"))
-            prod = query.first()
-            if prod:
-                return {
-                    "id": prod.id,
-                    "name": prod.name,
-                    "price": prod.price,
-                    "stock": prod.stock,
-                    "category": prod.category,
-                    "barcode": prod.barcode
-                }
+            
+            results = query.all()
+            if len(results) == 1:
+                return format_prod(results[0])
+            
             return None
         finally:
             db.close()
@@ -124,10 +149,11 @@ def _match_db_product(label: str) -> Optional[dict]:
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
-def _verify_color_signature(crop_img: Image.Image, label: str) -> bool:
+def _verify_color_signature(crop_img: Image.Image, label: str) -> Optional[bool]:
     """
     Sub-millisecond (<0.5ms) physical packaging color profile validator.
     Eliminates out-of-domain false positives using HSV color distributions.
+    Returns True if verified, False if verification fails, and None if verification is unavailable.
     """
     try:
         small = crop_img.resize((64, 64)).convert("HSV")
@@ -138,12 +164,12 @@ def _verify_color_signature(crop_img: Image.Image, label: str) -> bool:
 
         saturated = (s > 40) & (v > 50)
         if not np.any(saturated):
-            return True
+            return None
 
         h_deg = (h[saturated] / 255.0) * 360.0
         total = len(h_deg)
         if total == 0:
-            return True
+            return None
 
         yellow_pct = (np.sum((h_deg >= 35) & (h_deg <= 75)) / total) * 100
         green_pct = (np.sum((h_deg >= 80) & (h_deg <= 165)) / total) * 100
@@ -215,13 +241,17 @@ def _verify_color_signature(crop_img: Image.Image, label: str) -> bool:
             # Rejects bright neon purple/magenta dominance
             if purple_pct > 35.0:
                 return False
+        else:
+            # Missing verifier should normally mean verification unavailable
+            return None
 
         return True
     except Exception:
-        return True
+        # Do not fail open on exception
+        return False
 
 
-def _run_inference(img: Image.Image, conf_threshold: float = 0.25) -> DetectResponse:
+def _run_inference(img: Image.Image, user_id: str, conf_threshold: float = 0.25) -> DetectResponse:
     model = _get_model()
     rgb_img = img.convert("RGB")
     w, h = rgb_img.size
@@ -255,18 +285,18 @@ def _run_inference(img: Image.Image, conf_threshold: float = 0.25) -> DetectResp
             # Only run guard on borderline/low confidence detections (<0.60) to avoid rejecting genuine multi-object detections
             if conf < 0.60:
                 from retail_classifier import verify_crop_matches_label
-                if not verify_crop_matches_label(crop, label, min_matches=25):
+                if verify_crop_matches_label(crop, label, min_matches=25) is False:
                     logger.info(f"🛡️ [Verification Guard] Rejected out-of-domain candidate: {label} ({conf*100:.1f}%) on packaging descriptor mismatch")
                     print(f"🛡️ [Verification Guard] Rejected out-of-domain candidate: {label} ({conf*100:.1f}%) on packaging descriptor mismatch")
                     continue
 
                 # Fast Color Signature Guard (<0.5ms) - only run on borderline detections (<0.60)
-                if not _verify_color_signature(crop, label):
+                if _verify_color_signature(crop, label) is False:
                     logger.info(f"[Color Guard] Rejected: {label} ({conf*100:.1f}%) on non-matching package color")
                     continue
 
             # Lookup catalog product match
-            prod_match = _match_db_product(label)
+            prod_match = _match_db_product(label, user_id)
             class_display_name = FRIENDLY_NAMES.get(label, label.replace("_", " ").title())
 
             detections.append(Detection(
@@ -290,7 +320,7 @@ def _run_inference(img: Image.Image, conf_threshold: float = 0.25) -> DetectResp
                 y1 = int(bbox[1] * h)
                 x2 = int(bbox[2] * w)
                 y2 = int(bbox[3] * h)
-                prod_match = _match_db_product(lbl)
+                prod_match = _match_db_product(lbl, user_id)
                 class_display_name = FRIENDLY_NAMES.get(lbl, lbl.replace("_", " ").title())
                 detections.append(Detection(
                     label=lbl,
@@ -326,6 +356,7 @@ def _run_inference(img: Image.Image, conf_threshold: float = 0.25) -> DetectResp
 
 @router.post("/image", response_model=DetectResponse, summary="Detect products in an uploaded image")
 async def detect_from_upload(
+    user_id: CurrentUser,
     file: UploadFile = File(...),
     conf: float = Form(default=0.25)
 ):
@@ -335,29 +366,44 @@ async def detect_from_upload(
     """
     try:
         contents = await file.read()
+        if len(contents) > 4 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Image size exceeds maximum limit of 4MB")
         img = Image.open(io.BytesIO(contents))
-        return _run_inference(img, conf_threshold=conf)
+        if img.width > 2000 or img.height > 2000:
+            raise HTTPException(status_code=400, detail="Image dimensions exceed maximum limit of 2000x2000")
+        return _run_inference(img, user_id, conf_threshold=conf)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Detection error: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid image: {e}")
 
 
 @router.post("/base64", response_model=DetectResponse, summary="Detect products from a base64 image")
-async def detect_from_base64(payload: dict):
+async def detect_from_base64(
+    user_id: CurrentUser,
+    payload: dict
+):
     """
     Accept JSON with { "image": "<base64>", "conf": 0.65 } and return detections.
     Useful for the Android CameraX analysis use-case.
     """
     try:
         b64 = payload.get("image", "")
+        if len(b64) > 6 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Image size exceeds maximum limit of 6MB")
         conf = float(payload.get("conf", 0.35))
         img_bytes = base64.b64decode(b64)
         img = Image.open(io.BytesIO(img_bytes))
-        return _run_inference(img, conf_threshold=conf)
+        if img.width > 2000 or img.height > 2000:
+            raise HTTPException(status_code=400, detail="Image dimensions exceed maximum limit of 2000x2000")
+        return _run_inference(img, user_id, conf_threshold=conf)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Detection base64 error: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")

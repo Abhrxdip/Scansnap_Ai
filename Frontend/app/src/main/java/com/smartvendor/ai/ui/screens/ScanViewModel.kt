@@ -57,6 +57,9 @@ class ScanViewModel(
     private val yoloDetector = YoloDetectionRepository()
     private val barcodeScanner = BarcodeScannerManager()
     private val ocrScanner = OcrScannerManager()
+    
+    private val detectionStabilityMap = mutableMapOf<String, Int>()
+    private val latchedProductIds = mutableSetOf<String>()
 
     private var lastDetectedProductId: String? = null
     private var lastDetectedTimestamp: Long = 0L
@@ -68,6 +71,8 @@ class ScanViewModel(
 
     fun initialize(context: Context, billId: String) {
         viewModelScope.launch {
+            detectionStabilityMap.clear()
+            latchedProductIds.clear()
             _uiState.update { it.copy(aiStatus = "🔍 YOLO Object Detection Active") }
             loadBill(billId)
             observeInventory()
@@ -213,6 +218,8 @@ class ScanViewModel(
                             _uiState.update { it.copy(consecutiveFailedDetections = 0) }
                             handleYoloMultiDetected(result.detections)
                         } else {
+                            detectionStabilityMap.clear()
+                            latchedProductIds.clear()
                             _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
                         }
                     }
@@ -266,6 +273,8 @@ class ScanViewModel(
                 }
 
                 // Found high-confidence inventory match
+                detectionStabilityMap.clear()
+                latchedProductIds.clear()
                 _uiState.update {
                     it.copy(
                         detectedProduct = storeMatch,
@@ -328,6 +337,8 @@ class ScanViewModel(
                         return true
                     }
 
+                    detectionStabilityMap.clear()
+                    latchedProductIds.clear()
                     _uiState.update {
                         it.copy(
                             detectedProduct = targetProduct,
@@ -409,56 +420,104 @@ class ScanViewModel(
             val currentBilledNames = _uiState.value.currentBill?.items?.map { it.name.lowercase() }?.toSet() ?: emptySet()
 
             val matchedList = mutableListOf<Product>()
+            val currentFrameMatchedIds = mutableSetOf<String>()
             for (det in detections) {
                 // Multi-product confidence gating: capture all clear objects in view (threshold 0.35)
                 if (det.confidence < 0.35f) continue
                 if (det.label.lowercase().trim() == "maggi" && det.confidence < 0.55f) continue
 
                 val labelLower = det.label.lowercase().trim()
-                val matched = products.firstOrNull { product ->
-                    val pName = product.name.lowercase()
-                    when (labelLower) {
-                        "appe_fizz", "appy_fizz", "appe", "appy" -> pName.contains("appy") || pName.contains("appe") || pName.contains("fizz")
-                        "surf_excel", "surf" -> pName.contains("surf") || pName.contains("excel")
-                        "hide_and_seek", "hide_seek" -> pName.contains("hide") || pName.contains("seek")
-                        "oreo" -> pName.contains("oreo")
-                        "maggi" -> pName.contains("maggi")
-                        "jim_jam", "jimjam" -> pName.contains("jim") || pName.contains("jam")
-                        "bourbon", "bourbon_biscuit" -> pName.contains("bourbon")
-                        "nivea", "nivea_deodorant" -> pName.contains("nivea")
-                        "milky_biscuit", "milk_biscuit" -> pName.contains("milk") || pName.contains("milky")
-                        "parle_g", "parleg" -> pName.contains("parle")
-                        "good_day", "goodday" -> pName.contains("good") && pName.contains("day")
-                        "amul_ice_cream", "amul_icecream" -> pName.contains("amul") && (pName.contains("ice") || pName.contains("cream"))
-                        "cake", "britannia_cake", "treat_cake" -> pName.contains("cake")
-                        "cerave", "cerave_lotion", "cerave_cream" -> pName.contains("cerave")
-                        "hns_shampoo", "head_and_shoulders", "head_shoulders", "hns" -> (pName.contains("head") && pName.contains("shoulders")) || pName.contains("hns")
-                        "nestle_milk_powder", "milk_powder", "everyday_milk" -> (pName.contains("nestle") && pName.contains("milk")) || pName.contains("dairy whitener")
-                        "plum", "plum_skincare" -> pName.contains("plum")
-                        "thums_up", "thumsup" -> pName.contains("thums") && pName.contains("up")
-                        "wild_stone", "wildstone" -> pName.contains("wild") && pName.contains("stone")
-                        else -> {
-                            val cleanTokens = labelLower.replace("_", " ").split(" ").filter { it.length > 2 }
-                            cleanTokens.any { token -> pName.contains(token) }
+                val explicitTarget = when (labelLower) {
+                    "amul_ice_cream", "amul_icecream" -> "Amul Ice Cream Cup Vanilla Magic"
+                    "cake", "britannia_cake", "treat_cake" -> "Britannia Treat Chocolate Cake"
+                    "cerave", "cerave_lotion", "cerave_cream" -> "CeraVe Daily Moisturizing Lotion"
+                    "hns_shampoo", "head_and_shoulders", "head_shoulders", "hns" -> "Head & Shoulders Cool Menthol Shampoo"
+                    "nestle_milk_powder", "milk_powder", "everyday_milk" -> "Nestle Everyday Dairy Whitener"
+                    "plum", "plum_skincare" -> "Plum Green Tea Face Wash"
+                    "thums_up", "thumsup" -> "Thums Up Charged Carbonated Drink"
+                    "wild_stone", "wildstone" -> "Wild Stone Code Platinum Deodorant"
+                    "nivea", "nivea_deodorant" -> "Nivea Men Fresh Active Deodorant"
+                    "bourbon", "bourbon_biscuit" -> "Britannia Bourbon Chocolate Biscuits"
+                    "milky_biscuit", "milk_biscuit" -> "Britannia Milk Bikis Biscuits"
+                    "maggi" -> "Maggi 2-Minute Masala Noodles"
+                    "surf_excel", "surf" -> "Surf Excel Easy Wash Detergent"
+                    "hide_and_seek", "hide_seek" -> "Parle Hide & Seek Choco Chip Biscuits"
+                    "oreo" -> "Cadbury Oreo Original Biscuits"
+                    "appe_fizz", "appy_fizz", "appe", "appy" -> "Appy Fizz Sparkling Apple Juice"
+                    "jim_jam", "jimjam" -> "Britannia Treat Jim Jam Biscuits"
+                    "parle_g", "parleg" -> "Parle-G Gold Biscuits"
+                    "good_day", "goodday" -> "Britannia Good Day Butter Cookies"
+                    else -> null
+                }
+                
+                val normalizedLabel = labelLower.replace("_", " ")
+
+                var matched = explicitTarget?.let { target -> products.firstOrNull { it.name.equals(target, ignoreCase = true) } }
+                
+                if (matched == null) {
+                    matched = products.firstOrNull { it.name.equals(normalizedLabel, ignoreCase = true) }
+                }
+                
+                if (matched == null) {
+                    val matchingProducts = products.filter { product ->
+                        val pName = product.name.lowercase()
+                        when (labelLower) {
+                            "appe_fizz", "appy_fizz", "appe", "appy" -> pName.contains("appy fizz")
+                            "surf_excel", "surf" -> pName.contains("surf excel")
+                            "hide_and_seek", "hide_seek" -> pName.contains("hide & seek") || pName.contains("hide and seek")
+                            "oreo" -> pName.contains("oreo")
+                            "maggi" -> pName.contains("maggi") && pName.contains("noodles")
+                            "jim_jam", "jimjam" -> pName.contains("jim jam") || pName.contains("jimjam")
+                            "bourbon", "bourbon_biscuit" -> pName.contains("bourbon") && pName.contains("biscuit")
+                            "nivea", "nivea_deodorant" -> pName.contains("nivea") && pName.contains("deodorant")
+                            "milky_biscuit", "milk_biscuit" -> pName.contains("milk bikis")
+                            "parle_g", "parleg" -> pName.contains("parle-g") || pName.contains("parle g")
+                            "good_day", "goodday" -> pName.contains("good day")
+                            "amul_ice_cream", "amul_icecream" -> pName.contains("amul") && pName.contains("ice cream")
+                            "cake", "britannia_cake", "treat_cake" -> pName.contains("cake") && pName.contains("treat")
+                            "cerave", "cerave_lotion", "cerave_cream" -> pName.contains("cerave")
+                            "hns_shampoo", "head_and_shoulders", "head_shoulders", "hns" -> pName.contains("head & shoulders") || pName.contains("head and shoulders")
+                            "nestle_milk_powder", "milk_powder", "everyday_milk" -> pName.contains("everyday") && pName.contains("dairy")
+                            "plum", "plum_skincare" -> pName.contains("plum") && pName.contains("green tea")
+                            "thums_up", "thumsup" -> pName.contains("thums up")
+                            "wild_stone", "wildstone" -> pName.contains("wild stone")
+                            else -> {
+                                val cleanTokens = labelLower.replace("_", " ").split(" ").filter { it.length > 3 }
+                                if (cleanTokens.isEmpty()) false else cleanTokens.all { token -> pName.contains(token) }
+                            }
                         }
+                    }
+                    if (matchingProducts.size == 1) {
+                        matched = matchingProducts.first()
                     }
                 }
                 if (matched != null && !matchedList.any { it.id == matched.id }) {
-                    val isAlreadyBilled = currentBilledIds.contains(matched.id) ||
-                            currentBilledNames.contains(matched.name.lowercase())
-                    val lastAdded = maxOf(
-                        recentlyAddedTimestampMap[matched.id] ?: 0L,
-                        recentlyAddedTimestampMap[matched.name.lowercase()] ?: 0L
-                    )
-                    val isDismissed = dismissedProductIds.contains(matched.id) ||
-                            dismissedProductIds.contains(matched.name.lowercase())
+                    val isNewInFrame = currentFrameMatchedIds.add(matched.id)
+                    if (isNewInFrame) {
+                        val isLatched = latchedProductIds.contains(matched.id)
+                        val lastAdded = maxOf(
+                            recentlyAddedTimestampMap[matched.id] ?: 0L,
+                            recentlyAddedTimestampMap[matched.name.lowercase()] ?: 0L
+                        )
+                        val isDismissed = dismissedProductIds.contains(matched.id) ||
+                                dismissedProductIds.contains(matched.name.lowercase())
 
-                    // Only prompt if not already billed, not on cooldown, and not dismissed
-                    if (!isAlreadyBilled && now - lastAdded >= addedCooldownMs && !isDismissed) {
-                        matchedList.add(matched)
+                        // Proceed if not currently latched, not on cooldown, and not dismissed
+                        if (!isLatched && now - lastAdded >= addedCooldownMs && !isDismissed) {
+                            val count = detectionStabilityMap.getOrDefault(matched.id, 0) + 1
+                            detectionStabilityMap[matched.id] = count
+                            if (count >= 3) {
+                                matchedList.add(matched)
+                                detectionStabilityMap.remove(matched.id)
+                                latchedProductIds.add(matched.id)
+                            }
+                        }
                     }
                 }
             }
+
+            detectionStabilityMap.keys.retainAll(currentFrameMatchedIds)
+            latchedProductIds.retainAll(currentFrameMatchedIds)
 
             if (matchedList.isNotEmpty()) {
                 val currentBillState = _uiState.value.currentBill ?: Bill(
@@ -859,6 +918,8 @@ class ScanViewModel(
     }
 
     fun cancelDetection() {
+        detectionStabilityMap.clear()
+        latchedProductIds.clear()
         val currentProduct = _uiState.value.detectedProduct
         if (currentProduct != null) {
             dismissedProductIds.add(currentProduct.id)

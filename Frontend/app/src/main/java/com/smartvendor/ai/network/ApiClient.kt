@@ -1,6 +1,7 @@
 package com.smartvendor.ai.network
 
 import android.util.Log
+import com.smartvendor.ai.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
@@ -15,14 +16,14 @@ object ApiClient {
 
     // Current active Laptop IP address on Wi-Fi network: 10.88.240.180
     // (Hotspot IP: 192.168.137.1, Emulator: 10.0.2.2)
-    private const val BASE_URL = "http://192.168.31.69:8000/"
+    private val BASE_URL = BuildConfig.API_BASE_URL
 
     private val firebaseTokenInterceptor = Interceptor { chain ->
         val request = chain.request()
         val token = runBlocking {
             try {
                 FirebaseAuth.getInstance().currentUser
-                    ?.getIdToken(true)
+                    ?.getIdToken(false)
                     ?.await()
                     ?.token
             } catch (e: Exception) {
@@ -43,7 +44,12 @@ object ApiClient {
     }
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        if (BuildConfig.DEBUG) {
+            level = HttpLoggingInterceptor.Level.BODY
+            redactHeader("Authorization")
+        } else {
+            level = HttpLoggingInterceptor.Level.NONE
+        }
     }
 
     private val okHttpClient = OkHttpClient.Builder()

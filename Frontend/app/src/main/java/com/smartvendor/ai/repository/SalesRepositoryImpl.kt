@@ -77,6 +77,7 @@ class SalesRepositoryImpl : SalesRepository {
         if (bill.status == Bill.BILL_STATUS_COMPLETED) {
             return try {
                 val body = BillRequest(
+                    idempotencyKey = bill.billId,
                     items = bill.items.map { item ->
                         val cleanId = if (item.productId.startsWith("MANUAL_") || item.productId.isBlank()) null else item.productId
                         BillItemRequest(

@@ -32,19 +32,11 @@ def get_summary(
         start_time = now - timedelta(days=days)
         end_time = None
 
-    # Check if user has bills under their user_id; if not, query all bills
-    user_bill_count = db.query(func.count(models.Bill.id)).filter(models.Bill.user_id == user_id).scalar() or 0
-
     # Base query for bills
-    if user_bill_count > 0:
-        bill_query = db.query(models.Bill).filter(
-            models.Bill.user_id == user_id,
-            models.Bill.created_at >= start_time
-        )
-    else:
-        bill_query = db.query(models.Bill).filter(
-            models.Bill.created_at >= start_time
-        )
+    bill_query = db.query(models.Bill).filter(
+        models.Bill.user_id == user_id,
+        models.Bill.created_at >= start_time
+    )
 
     if end_time:
         bill_query = bill_query.filter(models.Bill.created_at < end_time)
@@ -75,8 +67,7 @@ def get_summary(
         models.Bill.created_at >= start_time
     )
 
-    if user_bill_count > 0:
-        item_query = item_query.filter(models.Bill.user_id == user_id)
+    item_query = item_query.filter(models.Bill.user_id == user_id)
 
     if end_time:
         item_query = item_query.filter(models.Bill.created_at < end_time)
@@ -105,8 +96,7 @@ def get_summary(
         models.Bill.created_at >= start_time
     )
 
-    if user_bill_count > 0:
-        daily_query = daily_query.filter(models.Bill.user_id == user_id)
+    daily_query = daily_query.filter(models.Bill.user_id == user_id)
 
     if end_time:
         daily_query = daily_query.filter(models.Bill.created_at < end_time)
@@ -143,8 +133,7 @@ def get_summary(
             (models.BillItem.product_id == p.id) | (models.BillItem.product_name == p.name),
             models.Bill.created_at >= last_7_days_start
         )
-        if user_bill_count > 0:
-            item_filter_query = item_filter_query.filter(models.Bill.user_id == user_id)
+        item_filter_query = item_filter_query.filter(models.Bill.user_id == user_id)
 
         items_7d = item_filter_query.all()
 
@@ -157,8 +146,7 @@ def get_summary(
             (models.BillItem.product_id == p.id) | (models.BillItem.product_name == p.name),
             models.Bill.created_at >= last_30_days_start
         )
-        if user_bill_count > 0:
-            items_30d_query = items_30d_query.filter(models.Bill.user_id == user_id)
+        items_30d_query = items_30d_query.filter(models.Bill.user_id == user_id)
 
         items_30d_qty = items_30d_query.scalar() or 0
         monthly_velocity = items_30d_qty / 30.0
@@ -195,8 +183,7 @@ def get_summary(
             models.Bill.created_at >= prev_7d_start,
             models.Bill.created_at < last_7_days_start
         )
-        if user_bill_count > 0:
-            items_prev_7d_query = items_prev_7d_query.filter(models.Bill.user_id == user_id)
+        items_prev_7d_query = items_prev_7d_query.filter(models.Bill.user_id == user_id)
         qty_prev_7d = items_prev_7d_query.scalar() or 0
 
         # Detect true demand surge (comparing week-over-week velocity)
@@ -269,6 +256,7 @@ def get_summary(
     ).join(
         models.Bill, models.BillItem.bill_id == models.Bill.id
     ).filter(
+        models.Bill.user_id == user_id,
         models.Bill.created_at >= last_30_days_start
     ).group_by(
         models.BillItem.product_name
@@ -309,6 +297,7 @@ def get_summary(
     ).join(
         models.Bill, models.BillItem.bill_id == models.Bill.id
     ).filter(
+        models.Bill.user_id == user_id,
         models.Bill.created_at >= last_30_days_start
     ).group_by(
         models.Product.category
