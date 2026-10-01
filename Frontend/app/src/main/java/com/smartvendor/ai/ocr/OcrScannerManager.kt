@@ -71,11 +71,11 @@ class OcrScannerManager {
         "hide 3seek" to "hide and seek", "hde seek" to "hide and seek", "hide & seek" to "hide and seek",
         "jimjan" to "jim jam", "jimiam" to "jim jam", "jimyam" to "jim jam", "jimjam" to "jim jam", "naughty jam" to "jim jam",
         "soya stica" to "soya sticks", "soya stic" to "soya sticks",
-        "surf excel" to "surf excel", "surf" to "surf excel", "excel" to "surf excel",
-        "appy" to "appy fizz", "fizz" to "appy fizz", "appe fizz" to "appy fizz",
+        "surf excel" to "surf excel",
+        "appe fizz" to "appy fizz",
         "bourbon" to "bourbon", "burbon" to "bourbon", "bourbonn" to "bourbon", "borbon" to "bourbon",
         "bourbon biscuit" to "bourbon", "choco bourbon" to "bourbon",
-        "parle-g" to "parle g", "parleg" to "parle g", "parle" to "parle g",
+        "parle-g" to "parle g", "parleg" to "parle g",
         "goodday" to "good day", "good-day" to "good day",
         "kurkure" to "kurkure", "kur kure" to "kurkure",
         "dettol" to "dettol", "detol" to "dettol",
@@ -266,7 +266,8 @@ class OcrScannerManager {
                     }
                 }
 
-                val sampledColor = detectDominantColor(mediaImage)
+                val topBox = validLines.firstOrNull()?.boundingBox
+                val sampledColor = detectDominantColor(mediaImage, topBox, imageProxy.imageInfo.rotationDegrees)
 
                 if (!detectedName.isNullOrBlank()) {
                     val combinedName = if (!detectedUnit.isNullOrBlank() && !detectedName!!.contains(detectedUnit!!, ignoreCase = true)) {
@@ -391,7 +392,7 @@ class OcrScannerManager {
             }
     }
 
-    private fun detectDominantColor(yuvImage: android.media.Image): PackagingColor {
+    private fun detectDominantColor(yuvImage: android.media.Image, boundingBox: Rect?, rotationDegrees: Int): PackagingColor {
         return try {
             val yBuffer = yuvImage.planes[0].buffer
             val uBuffer = yuvImage.planes[1].buffer
@@ -400,18 +401,75 @@ class OcrScannerManager {
             val width = yuvImage.width
             val height = yuvImage.height
 
-            var totalR = 0L
-            var totalG = 0L
-            var totalB = 0L
-            var sampleCount = 0
+            var startX = 0
+            var endX = 0
+            var startY = 0
+            var endY = 0
 
-            val startX = width / 4
-            val endX = (width * 3) / 4
-            val startY = height / 4
-            val endY = (height * 3) / 4
+            if (boundingBox != null) {
+                var mappedLeft = 0
+                var mappedTop = 0
+                var mappedRight = 0
+                var mappedBottom = 0
+
+                when (rotationDegrees) {
+                    0 -> {
+                        mappedLeft = boundingBox.left
+                        mappedTop = boundingBox.top
+                        mappedRight = boundingBox.right
+                        mappedBottom = boundingBox.bottom
+                    }
+                    90 -> {
+                        mappedLeft = boundingBox.top
+                        mappedTop = height - boundingBox.right
+                        mappedRight = boundingBox.bottom
+                        mappedBottom = height - boundingBox.left
+                    }
+                    180 -> {
+                        mappedLeft = width - boundingBox.right
+                        mappedTop = height - boundingBox.bottom
+                        mappedRight = width - boundingBox.left
+                        mappedBottom = height - boundingBox.top
+                    }
+                    270 -> {
+                        mappedLeft = width - boundingBox.bottom
+                        mappedTop = boundingBox.left
+                        mappedRight = width - boundingBox.top
+                        mappedBottom = boundingBox.right
+                    }
+                    else -> {
+                        mappedLeft = boundingBox.left
+                        mappedTop = boundingBox.top
+                        mappedRight = boundingBox.right
+                        mappedBottom = boundingBox.bottom
+                    }
+                }
+
+                mappedLeft = mappedLeft.coerceIn(0, width - 1)
+                mappedRight = mappedRight.coerceIn(0, width - 1)
+                mappedTop = mappedTop.coerceIn(0, height - 1)
+                mappedBottom = mappedBottom.coerceIn(0, height - 1)
+
+                val tempStartX = minOf(mappedLeft, mappedRight)
+                val tempEndX = maxOf(mappedLeft, mappedRight)
+                val tempStartY = minOf(mappedTop, mappedBottom)
+                val tempEndY = maxOf(mappedTop, mappedBottom)
+
+                if (tempStartX < tempEndX && tempStartY < tempEndY) {
+                    startX = tempStartX
+                    endX = tempEndX
+                    startY = tempStartY
+                    endY = tempEndY
+                }
+            }
+
+            if (startX >= endX || startY >= endY) return PackagingColor.UNKNOWN
 
             val stepX = maxOf(1, (endX - startX) / 8)
             val stepY = maxOf(1, (endY - startY) / 8)
+
+            val hueCounts = mutableMapOf<PackagingColor, Int>()
+            var validSampleCount = 0
 
             for (y in startY until endY step stepY) {
                 for (x in startX until endX step stepX) {
@@ -420,7 +478,7 @@ class OcrScannerManager {
 
                     if (yIndex < yBuffer.capacity() && uvIndex < uBuffer.capacity() && uvIndex < vBuffer.capacity()) {
                         val Y = yBuffer.get(yIndex).toInt() and 0xFF
-                        if (Y > 235) continue
+                        if (Y > 235 || Y < 40) continue // Ignore near-white glare and very dark shadows
 
                         val U = uBuffer.get(uvIndex).toInt() and 0xFF - 128
                         val V = vBuffer.get(uvIndex).toInt() and 0xFF - 128
@@ -429,39 +487,40 @@ class OcrScannerManager {
                         val G = (Y - 0.337633 * U - 0.698001 * V).toInt().coerceIn(0, 255)
                         val B = (Y + 1.732446 * U).toInt().coerceIn(0, 255)
 
-                        totalR += R
-                        totalG += G
-                        totalB += B
-                        sampleCount++
+                        val hsv = FloatArray(3)
+                        android.graphics.Color.RGBToHSV(R, G, B, hsv)
+                        
+                        if (hsv[1] < 0.20f) continue // Ignore completely desaturated/grayish pixels
+
+                        val color = when {
+                            hsv[0] in 345f..360f || hsv[0] in 0f..20f -> PackagingColor.RED
+                            hsv[0] in 21f..50f -> PackagingColor.ORANGE
+                            hsv[0] in 51f..75f -> PackagingColor.YELLOW
+                            hsv[0] in 76f..160f -> PackagingColor.GREEN
+                            hsv[0] in 180f..260f -> PackagingColor.BLUE
+                            hsv[0] in 261f..320f -> PackagingColor.PURPLE
+                            else -> PackagingColor.UNKNOWN
+                        }
+
+                        if (color != PackagingColor.UNKNOWN) {
+                            hueCounts[color] = hueCounts.getOrDefault(color, 0) + 1
+                            validSampleCount++
+                        }
                     }
                 }
             }
 
-            if (sampleCount == 0) return PackagingColor.UNKNOWN
+            if (validSampleCount < 10) return PackagingColor.UNKNOWN
 
-            val avgR = (totalR / sampleCount).toFloat()
-            val avgG = (totalG / sampleCount).toFloat()
-            val avgB = (totalB / sampleCount).toFloat()
-
-            val hsv = FloatArray(3)
-            android.graphics.Color.RGBToHSV(avgR.toInt(), avgG.toInt(), avgB.toInt(), hsv)
-            val hue = hsv[0]
-            val sat = hsv[1]
-            val value = hsv[2]
-
-            if (sat < 0.20f) return PackagingColor.UNKNOWN
-
-            when {
-                hue in 345f..360f || hue in 0f..20f -> PackagingColor.RED
-                hue in 21f..50f -> PackagingColor.ORANGE
-                hue in 51f..75f -> PackagingColor.YELLOW
-                hue in 76f..160f -> PackagingColor.GREEN
-                hue in 180f..260f -> PackagingColor.BLUE
-                hue in 261f..320f -> PackagingColor.PURPLE
-                else -> PackagingColor.UNKNOWN
+            val dominant = hueCounts.maxByOrNull { it.value }
+            // Require a minimum proportion (50%) to agree to prevent highly mixed false positives
+            if (dominant != null && dominant.value >= validSampleCount * 0.5f) {
+                return dominant.key
             }
+            
+            return PackagingColor.UNKNOWN
         } catch (e: Exception) {
-            PackagingColor.UNKNOWN
+            return PackagingColor.UNKNOWN
         }
     }
 
@@ -499,8 +558,14 @@ class OcrScannerManager {
             } else 0f
 
             // 2. Substring Match Boost
-            if (catalogNameLower.contains(scannedNameLower) || scannedNameLower.contains(catalogNameLower)) {
+            if (scannedNameLower.contains(catalogNameLower)) {
                 tokenScore = maxOf(tokenScore, 0.90f)
+            } else if (catalogNameLower.contains(scannedNameLower)) {
+                if (scannedTokens.size >= 2 || scannedNameLower.length >= 7) {
+                    tokenScore = maxOf(tokenScore, 0.90f)
+                } else {
+                    tokenScore = maxOf(tokenScore, 0.65f)
+                }
             }
 
             // 3. Known Stylized Font Alias Mapping Boost
@@ -522,7 +587,7 @@ class OcrScannerManager {
             // Color boost
             val targetColor = productColorSignatures[product.name.lowercase(Locale.getDefault())]
             if (targetColor != null && ocrResult.detectedColor != PackagingColor.UNKNOWN) {
-                if (targetColor == ocrResult.detectedColor) {
+                if (targetColor == ocrResult.detectedColor && tokenScore >= threshold) {
                     tokenScore = minOf(1.0f, tokenScore + 0.15f)
                 }
             }
@@ -532,7 +597,16 @@ class OcrScannerManager {
             }
         }
 
-        return matches.sortedByDescending { it.second }.map { it.first }
+        val sortedMatches = matches.sortedByDescending { it.second }
+        if (sortedMatches.size > 1) {
+            val topScore = sortedMatches[0].second
+            val runnerUpScore = sortedMatches[1].second
+            if (topScore < 1.0f && (topScore - runnerUpScore) < 0.05f) {
+                return emptyList()
+            }
+        }
+
+        return sortedMatches.map { it.first }
     }
 
     /**
@@ -570,8 +644,14 @@ class OcrScannerManager {
 
                 tokenScore = matchingTokens.toFloat() / maxOf(scannedTokens.size, catalogTokens.size).toFloat()
 
-                if (catalogNameLower.contains(scannedNameLower) || scannedNameLower.contains(catalogNameLower)) {
+                if (scannedNameLower.contains(catalogNameLower)) {
                     tokenScore = maxOf(tokenScore, 0.90f)
+                } else if (catalogNameLower.contains(scannedNameLower)) {
+                    if (scannedTokens.size >= 2 || scannedNameLower.length >= 7) {
+                        tokenScore = maxOf(tokenScore, 0.90f)
+                    } else {
+                        tokenScore = maxOf(tokenScore, 0.75f) // Matches original threshold
+                    }
                 }
 
                 val levSim = charSimilarity(scannedNameLower, catalogNameLower)
@@ -586,7 +666,7 @@ class OcrScannerManager {
 
                 val targetColor = productColorSignatures[item.name.lowercase(Locale.getDefault())]
                 if (targetColor != null && ocrResult.detectedColor != PackagingColor.UNKNOWN) {
-                    if (targetColor == ocrResult.detectedColor) {
+                    if (targetColor == ocrResult.detectedColor && tokenScore >= threshold) {
                         tokenScore = minOf(1.0f, tokenScore + 0.10f)
                     }
                 }
@@ -597,7 +677,16 @@ class OcrScannerManager {
             }
         }
 
-        return matches.sortedByDescending { it.second }.map { it.first }
+        val sortedMatches = matches.sortedByDescending { it.second }
+        if (sortedMatches.size > 1) {
+            val topScore = sortedMatches[0].second
+            val runnerUpScore = sortedMatches[1].second
+            if (topScore < 1.0f && (topScore - runnerUpScore) < 0.05f) {
+                return emptyList()
+            }
+        }
+
+        return sortedMatches.map { it.first }
     }
 
     fun close() {

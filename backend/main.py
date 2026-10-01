@@ -14,9 +14,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")
+if ALLOWED_ORIGINS:
+    origins = [o.strip() for o in ALLOWED_ORIGINS.split(",")]
+elif os.getenv("DEV_AUTH_BYPASS", "").lower() == "true":
+    origins = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173"]
+else:
+    origins = []
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,6 +61,9 @@ def health():
 
 @app.get("/view-data", tags=["Database Inspection"])
 def view_data(db: Session = Depends(get_db)):
+    if os.getenv("DEV_AUTH_BYPASS", "").lower() != "true":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Endpoint disabled in production")
     products_list = db.query(models.Product).all()
     bills_list = db.query(models.Bill).all()
 

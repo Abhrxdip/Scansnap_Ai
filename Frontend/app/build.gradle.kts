@@ -29,7 +29,13 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            buildConfigField("String", "API_BASE_URL", "\"http://192.168.31.69:8000/\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
+            buildConfigField("String", "API_BASE_URL", "\"https://api.smartvendor.example.com/\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -46,6 +52,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     androidResources {
         noCompress += listOf("tflite", "lite")

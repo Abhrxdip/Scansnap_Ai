@@ -72,6 +72,7 @@ data class BillItemRequest(
 )
 
 data class BillRequest(
+    @SerializedName("idempotency_key") val idempotencyKey: String? = null,
     val items: List<BillItemRequest>,
     @SerializedName("total_amount") val totalAmount: Double,
     @SerializedName("tax_amount") val taxAmount: Double = 0.0,

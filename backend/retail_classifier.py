@@ -152,14 +152,15 @@ def classify_product_image(pil_img: Image.Image) -> Optional[Tuple[str, float, T
     return (best_label, conf, bbox)
 
 
-def verify_crop_matches_label(crop_img, candidate_label: str, min_matches: int = 50) -> bool:
+def verify_crop_matches_label(crop_img, candidate_label: str, min_matches: int = 50) -> Optional[bool]:
     """
     Verifies that a detected object crop genuinely matches the authentic indexed packaging
     of the candidate category using Lowe's ratio test.
+    Returns True if verified, False if verification fails, and None if verification is unavailable.
     """
     indexed = get_indexed_descriptors()
     if not indexed or candidate_label not in indexed:
-        return True
+        return None
 
     orb, matcher = _get_detector_and_matcher()
     if isinstance(crop_img, Image.Image):
@@ -167,32 +168,36 @@ def verify_crop_matches_label(crop_img, candidate_label: str, min_matches: int =
     elif isinstance(crop_img, np.ndarray):
         crop_bgr = crop_img
     else:
-        return True
+        return None
 
     h, w = crop_bgr.shape[:2]
     if h < 20 or w < 20:
         return False
 
-    kp, des = orb.detectAndCompute(crop_bgr, None)
-    if des is None or len(des) < 15:
+    try:
+        kp, des = orb.detectAndCompute(crop_bgr, None)
+        if des is None or len(des) < 15:
+            return False
+
+        ref_list = indexed.get(candidate_label, [])
+        if not ref_list:
+            return None
+
+        max_matches = 0
+        for ref_name, ref_des in ref_list:
+            try:
+                knn_matches = matcher.knnMatch(des, ref_des, k=2)
+                good_matches = [m[0] for m in knn_matches if len(m) == 2 and m[0].distance < 0.75 * m[1].distance]
+                if len(good_matches) > max_matches:
+                    max_matches = len(good_matches)
+                    if max_matches >= min_matches:
+                        return True
+            except Exception:
+                continue
+
+        return max_matches >= min_matches
+    except Exception:
+        # Do not fail open on exception
         return False
-
-    ref_list = indexed.get(candidate_label, [])
-    if not ref_list:
-        return True
-
-    max_matches = 0
-    for ref_name, ref_des in ref_list:
-        try:
-            knn_matches = matcher.knnMatch(des, ref_des, k=2)
-            good_matches = [m[0] for m in knn_matches if len(m) == 2 and m[0].distance < 0.75 * m[1].distance]
-            if len(good_matches) > max_matches:
-                max_matches = len(good_matches)
-                if max_matches >= min_matches:
-                    return True
-        except Exception:
-            continue
-
-    return max_matches >= min_matches
 
 
