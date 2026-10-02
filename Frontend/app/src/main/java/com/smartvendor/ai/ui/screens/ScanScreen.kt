@@ -216,7 +216,7 @@ fun ScanScreen(
                         isBarcodeActive = uiState.isBarcodeActive || uiState.isOcrActive
                     )
 
-                    // Scanner Mode Chips: Barcode vs OCR Label Reader
+                    // Scanner Mode Chips: Object Detection vs OCR Mode
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -230,7 +230,7 @@ fun ScanScreen(
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = "⚡ Smart Scanner",
+                                text = "🔍 Object Detection",
                                 fontWeight = FontWeight.Black,
                                 fontSize = 12.sp,
                                 color = NeuBlack

@@ -1,0 +1,9 @@
+# ScanSnap AI — Standalone OCR Module Dependencies
+# Note: The core ocr_engine.py runs out-of-the-box using standard Python 3.8+ libraries (re, json, math)
+# Optional packages for high-performance fuzzy matching & image OCR testing:
+rapidfuzz>=3.0.0
+Pillow>=9.5.0
+numpy>=1.22.0
+# Optional for direct image-to-text experimentation:
+# pytesseract>=0.3.10
+# easyocr>=1.7.0

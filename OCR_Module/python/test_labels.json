@@ -1,0 +1,130 @@
+[
+  {
+    "test_id": "TC-01",
+    "raw_ocr": "MAGGI 2-Minute Masala Noodles Net Wt 70g Best Before 9 Months MRP Rs 14.00 Incl of all taxes",
+    "expected_id": "maggi",
+    "expected_price": 14.0,
+    "expected_unit": "70G",
+    "notes": "Standard Maggi label with noise words & price"
+  },
+  {
+    "test_id": "TC-02",
+    "raw_ocr": "Cadbury ORE0 Sandwich Biscuits 120g Vanilla Creme MRP: Rs. 35.00",
+    "expected_id": "oreo",
+    "expected_price": 35.0,
+    "expected_unit": "120G",
+    "notes": "Font alias test: ore0 with zero instead of 'o'"
+  },
+  {
+    "test_id": "TC-03",
+    "raw_ocr": "Amul Ice Cream Cup Vanilla Magic 100ml Delicious Taste MRP ₹ 30.00",
+    "expected_id": "amul_ice_cream",
+    "expected_price": 30.0,
+    "expected_unit": "100ML",
+    "notes": "Amul vanilla cup from retail dataset"
+  },
+  {
+    "test_id": "TC-04",
+    "raw_ocr": "Britannia Cake Gobbles Choco Chill 65g Rich Chocolate Treats MRP 30.00",
+    "expected_id": "cake",
+    "expected_price": 30.0,
+    "expected_unit": "65G",
+    "notes": "Britannia Cake dataset product"
+  },
+  {
+    "test_id": "TC-05",
+    "raw_ocr": "CeraVe Hydrating Cleanser 236ml For Normal to Dry Skin with 3 Essential Ceramides",
+    "expected_id": "cerave",
+    "expected_price": null,
+    "expected_unit": "236ML",
+    "notes": "Dermatological packaging"
+  },
+  {
+    "test_id": "TC-06",
+    "raw_ocr": "Head & Shoulders Cool Menthol Anti-Dandruff Shampoo 180ml MRP Rs 250.00",
+    "expected_id": "hns_shampoo",
+    "expected_price": 250.0,
+    "expected_unit": "180ML",
+    "notes": "HnS cool menthol shampoo"
+  },
+  {
+    "test_id": "TC-07",
+    "raw_ocr": "Nestle Everyday Dairy Whitener Milk Powder 20g Sachet Pack MRP ₹10.00",
+    "expected_id": "nestle_milk_powder",
+    "expected_price": 10.0,
+    "expected_unit": "20G",
+    "notes": "Milk powder sachet packaging"
+  },
+  {
+    "test_id": "TC-08",
+    "raw_ocr": "Plum Green Tea Pore Cleansing Face Wash 100ml SLS Free MRP: Rs. 350.00",
+    "expected_id": "plum",
+    "expected_price": 350.0,
+    "expected_unit": "100ML",
+    "notes": "Plum skincare bottle"
+  },
+  {
+    "test_id": "TC-09",
+    "raw_ocr": "Thums Up Charged Carbonated Beverage Can 250ml Taste the Thunder MRP Rs 20.00",
+    "expected_id": "thums_up",
+    "expected_price": 20.0,
+    "expected_unit": "250ML",
+    "notes": "Thums up can with tagline noise"
+  },
+  {
+    "test_id": "TC-10",
+    "raw_ocr": "Wild Stone Forest Spice Deodorant Soap 125g Premium Luxury Fragrance MRP Rs. 70.00",
+    "expected_id": "wild_stone",
+    "expected_price": 70.0,
+    "expected_unit": "125G",
+    "notes": "Wild Stone soap bar"
+  },
+  {
+    "test_id": "TC-11",
+    "raw_ocr": "Britannia Burbon Chocolate Cream Biscuits Net Weight 150g MRP: Rs 30.00",
+    "expected_id": "bourbon_biscuit",
+    "expected_price": 30.0,
+    "expected_unit": "150G",
+    "notes": "Misspelled alias: burbon"
+  },
+  {
+    "test_id": "TC-12",
+    "raw_ocr": "Surf Excel Easy Wash Detergent Powder 1kg Stain Removal MRP Rs. 120.00",
+    "expected_id": "surf_excel",
+    "expected_price": 120.0,
+    "expected_unit": "1KG",
+    "notes": "Detergent pouch label"
+  },
+  {
+    "test_id": "TC-13",
+    "raw_ocr": "Parle Hide & Seek Choco Chip Biscuits 100g Real Chocolate MRP 30.00",
+    "expected_id": "hide_and_seek",
+    "expected_price": 30.0,
+    "expected_unit": "100G",
+    "notes": "Hide & Seek biscuits"
+  },
+  {
+    "test_id": "TC-14",
+    "raw_ocr": "Appy Fizz Sparkling Apple Juice Drink 160ml Feel The Fizz Rs. 35.00",
+    "expected_id": "appe_fizz",
+    "expected_price": 35.0,
+    "expected_unit": "160ML",
+    "notes": "Appy fizz apple juice"
+  },
+  {
+    "test_id": "TC-15",
+    "raw_ocr": "Nivea Men Fresh Active Deodorant 150ml Ocean Extracts 48h Protection MRP ₹ 199.00",
+    "expected_id": "nivea_deodorant",
+    "expected_price": 199.0,
+    "expected_unit": "150ML",
+    "notes": "Aerosol can text"
+  },
+  {
+    "test_id": "TC-16",
+    "raw_ocr": "FSSAI LIC NO 10014022002758 MFG DATE 12/25 EXP DATE 12/26 KEEP IN COOL DRY PLACE",
+    "expected_id": null,
+    "expected_price": null,
+    "expected_unit": null,
+    "notes": "Negative control: Pure noise text should be UNRESOLVED"
+  }
+]

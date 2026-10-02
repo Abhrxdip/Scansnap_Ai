@@ -18,7 +18,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     { id: 'inventory', label: 'Master Inventory', icon: Package },
     { id: 'bills', label: 'Invoice Archive', icon: Receipt },
     { id: 'offers', label: 'Festivals & Combos', icon: Tag, badge: 'Smart AI' },
-    { id: 'ai-studio', label: 'Visual AI Studio', icon: Sparkles, badge: 'YOLOv11' },
+    { id: 'ai-studio', label: 'AI & Vision Studio', icon: Sparkles, badge: 'YOLO + OCR' },
     { id: 'settings', label: 'Store & Terminals', icon: Sliders },
   ];
 

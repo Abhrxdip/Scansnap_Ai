@@ -57,15 +57,15 @@ class DetectResponse(BaseModel):
 
 
 FRIENDLY_NAMES = {
-    "amul_ice_cream": "Amul Ice Cream Cup Vanilla Magic",
-    "cake": "Britannia Treat Chocolate Cake",
-    "cerave": "CeraVe Daily Moisturizing Lotion",
-    "hns_shampoo": "Head & Shoulders Cool Menthol Shampoo",
-    "nestle_milk_powder": "Nestle Everyday Dairy Whitener",
-    "plum": "Plum Green Tea Face Wash",
-    "thums_up": "Thums Up Charged Carbonated Drink",
-    "wild_stone": "Wild Stone Code Platinum Deodorant",
-    "nivea_deodorant": "Nivea Men Fresh Active Deodorant",
+    "amul_ice_cream": "Amul Ice Cream Cup Vanilla Magic 100ml",
+    "cake": "Britannia Cake Gobbles Choco Chill 65g",
+    "cerave": "CeraVe Hydrating Cleanser 236ml",
+    "hns_shampoo": "Head & Shoulders Cool Menthol Anti-Dandruff Shampoo 180ml",
+    "nestle_milk_powder": "Nestle Everyday Dairy Whitener Milk Powder 20g",
+    "plum": "Plum Green Tea Pore Cleansing Face Wash 100ml",
+    "thums_up": "Thums Up Charged Carbonated Beverage 250ml Can",
+    "wild_stone": "Wild Stone Forest Spice Deodorant Soap 125g",
+    "nivea_deodorant": "Nivea Men Fresh Active Deodorant 150ml",
     "bourbon_biscuit": "Britannia Bourbon Chocolate Biscuits",
     "milky_biscuit": "Britannia Milk Bikis Biscuits",
     "maggi": "Maggi 2-Minute Masala Noodles",
@@ -96,35 +96,21 @@ def _match_db_product(label: str, user_id: str) -> Optional[dict]:
                 }
 
             explicit_name = FRIENDLY_NAMES.get(normalized_label)
-            if explicit_name:
-                prod = db.query(models.Product).filter(
-                    models.Product.name.ilike(explicit_name),
-                    models.Product.user_id == user_id
-                ).first()
-                if prod:
-                    return format_prod(prod)
-
             normalized_name_str = normalized_label.replace("_", " ")
-            prod = db.query(models.Product).filter(
-                models.Product.name.ilike(normalized_name_str),
-                models.Product.user_id == user_id
-            ).first()
-            if prod:
-                return format_prod(prod)
 
             keywords_map = {
                 "amul_ice_cream": ["Amul", "Ice Cream"],
                 "cake": ["Britannia", "Cake"],
                 "cerave": ["CeraVe"],
-                "hns_shampoo": ["Head & Shoulders", "Shampoo"],
-                "nestle_milk_powder": ["Nestle", "Milk Powder"],
+                "hns_shampoo": ["Head & Shoulders"],
+                "nestle_milk_powder": ["Nestle", "Everyday"],
                 "plum": ["Plum"],
                 "thums_up": ["Thums Up"],
                 "wild_stone": ["Wild Stone"],
-                "nivea_deodorant": ["Nivea"],
-                "bourbon_biscuit": ["Bourbon", "Biscuit"],
+                "nivea_deodorant": ["Nivea", "Deodorant"],
+                "bourbon_biscuit": ["Bourbon"],
                 "milky_biscuit": ["Milk", "Bikis"],
-                "maggi": ["Maggi", "Noodles"],
+                "maggi": ["Maggi"],
                 "surf_excel": ["Surf", "Excel"],
                 "hide_and_seek": ["Hide", "Seek"],
                 "oreo": ["Oreo"],
@@ -132,13 +118,70 @@ def _match_db_product(label: str, user_id: str) -> Optional[dict]:
                 "jim_jam": ["Jim", "Jam"]
             }
             kws = keywords_map.get(normalized_label, [normalized_name_str])
-            query = db.query(models.Product).filter(models.Product.user_id == user_id)
+
+            # 1. Search in user's shelf (or demo_user fallback)
+            target_user_ids = [user_id]
+            if user_id != "demo_user":
+                target_user_ids.append("demo_user")
+
+            for uid in target_user_ids:
+                if explicit_name:
+                    prod = db.query(models.Product).filter(
+                        models.Product.name.ilike(f"%{explicit_name}%"),
+                        models.Product.user_id == uid
+                    ).first()
+                    if prod:
+                        return format_prod(prod)
+
+                prod = db.query(models.Product).filter(
+                    models.Product.name.ilike(f"%{normalized_name_str}%"),
+                    models.Product.user_id == uid
+                ).first()
+                if prod:
+                    return format_prod(prod)
+
+                query = db.query(models.Product).filter(models.Product.user_id == uid)
+                for kw in kws:
+                    query = query.filter(models.Product.name.ilike(f"%{kw}%"))
+                prod = query.first()
+                if prod:
+                    return format_prod(prod)
+
+            # Fallback for Nivea brand specifically
+            if normalized_label == "nivea_deodorant":
+                for uid in target_user_ids:
+                    nivea_prod = db.query(models.Product).filter(
+                        models.Product.name.ilike("%Nivea%"),
+                        models.Product.user_id == uid
+                    ).first()
+                    if nivea_prod:
+                        return format_prod(nivea_prod)
+
+            # 2. Fallback to master catalog
+            cat_query = db.query(models.MasterCatalog)
+            if explicit_name:
+                cat_prod = cat_query.filter(models.MasterCatalog.name.ilike(f"%{explicit_name}%")).first()
+                if cat_prod:
+                    return {
+                        "id": cat_prod.id,
+                        "name": cat_prod.name,
+                        "price": cat_prod.suggested_price,
+                        "stock": 50,
+                        "category": cat_prod.category,
+                        "barcode": cat_prod.barcode
+                    }
             for kw in kws:
-                query = query.filter(models.Product.name.ilike(f"%{kw}%"))
-            
-            results = query.all()
-            if len(results) == 1:
-                return format_prod(results[0])
+                cat_query = cat_query.filter(models.MasterCatalog.name.ilike(f"%{kw}%"))
+            cat_item = cat_query.first()
+            if cat_item:
+                return {
+                    "id": cat_item.id,
+                    "name": cat_item.name,
+                    "price": cat_item.suggested_price,
+                    "stock": 50,
+                    "category": cat_item.category,
+                    "barcode": cat_item.barcode
+                }
             
             return None
         finally:
@@ -215,8 +258,9 @@ def _verify_color_signature(crop_img: Image.Image, label: str) -> Optional[bool]
             if blue_pct > 30.0:
                 return False
         elif lbl == "cerave":
-            # CeraVe: Clean white / cyan-blue clinical packaging. Rejects bright yellow or dark green dominance.
-            if yellow_pct > 35.0 or green_pct > 35.0:
+            # CeraVe: Clean white packaging with either cyan-blue (Lotion) or mint green (Hydrating Cleanser) accents.
+            # Rejects bright yellow or purple dominance.
+            if yellow_pct > 40.0 or purple_pct > 30.0:
                 return False
         elif lbl == "hns_shampoo":
             # Head & Shoulders: Distinctive crisp white bottle with royal blue cap.
@@ -247,8 +291,30 @@ def _verify_color_signature(crop_img: Image.Image, label: str) -> Optional[bool]
 
         return True
     except Exception:
-        # Do not fail open on exception
-        return False
+        return None
+
+
+def _box_iou(b1: list[float], b2: list[float]) -> float:
+    x1 = max(b1[0], b2[0])
+    y1 = max(b1[1], b2[1])
+    x2 = min(b1[2], b2[2])
+    y2 = min(b1[3], b2[3])
+    inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+    a1 = max(0.0, b1[2] - b1[0]) * max(0.0, b1[3] - b1[1])
+    a2 = max(0.0, b2[2] - b2[0]) * max(0.0, b2[3] - b2[1])
+    union = a1 + a2 - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _box_containment(b_small: list[float], b_large: list[float]) -> float:
+    """Measures how much of b_small is engulfed inside b_large."""
+    x1 = max(b_small[0], b_large[0])
+    y1 = max(b_small[1], b_large[1])
+    x2 = min(b_small[2], b_large[2])
+    y2 = min(b_small[3], b_large[3])
+    inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+    a_small = max(1.0, (b_small[2] - b_small[0]) * (b_small[3] - b_small[1]))
+    return inter / a_small
 
 
 def _run_inference(img: Image.Image, user_id: str, conf_threshold: float = 0.25) -> DetectResponse:
@@ -256,16 +322,17 @@ def _run_inference(img: Image.Image, user_id: str, conf_threshold: float = 0.25)
     rgb_img = img.convert("RGB")
     w, h = rgb_img.size
 
-    # Run inference with class-specific NMS (agnostic_nms=False) so different adjacent/touching products are both detected
+    raw_candidates = []
+
+    # 1. Global Image Inference Pass with optimal imgsz=640
     results = model.predict(
         source=rgb_img,
-        conf=conf_threshold,
+        imgsz=640,
+        conf=max(0.15, conf_threshold - 0.05),
         iou=0.45,
         agnostic_nms=False,
         verbose=False
     )
-
-    detections: list[Detection] = []
 
     for result in results:
         for box in result.boxes:
@@ -273,41 +340,101 @@ def _run_inference(img: Image.Image, user_id: str, conf_threshold: float = 0.25)
             label = model.names[cls_id]
             conf = float(box.conf[0])
             x1, y1, x2, y2 = box.xyxy[0].tolist()
+            raw_candidates.append((label, conf, [x1, y1, x2, y2]))
 
-            logger.info(f"🎯 [YOLO Model Box] Found {label} ({conf*100:.1f}%)")
-            print(f"🎯 [YOLO Model Box] Found {label} ({conf*100:.1f}%)")
+    # 2. Sort candidates by confidence descending
+    raw_candidates.sort(key=lambda x: x[1], reverse=True)
 
-            # Crop detection region
-            crop_box = (max(0, int(x1)), max(0, int(y1)), min(w, int(x2)), min(h, int(y2)))
-            crop = rgb_img.crop(crop_box)
+    # 3. Intelligent Overlap Deduplication & Cross-Class Suppression
+    deduped = []
+    for cand in raw_candidates:
+        lbl, conf, box = cand
+        merged_or_suppressed = False
+        for idx, kept in enumerate(deduped):
+            k_lbl, k_conf, k_box = kept
+            iou = _box_iou(box, k_box)
+            cont_cand_in_kept = _box_containment(box, k_box)
+            cont_kept_in_cand = _box_containment(k_box, box)
 
-            # Feature Packshot Descriptor Verification Guard:
-            # Only run guard on borderline/low confidence detections (<0.60) to avoid rejecting genuine multi-object detections
-            if conf < 0.60:
+            if lbl == k_lbl:
+                # Same class: if they overlap or one contains another, merge into full packaging bounding box
+                if iou > 0.10 or cont_cand_in_kept > 0.25 or cont_kept_in_cand > 0.25:
+                    new_box = [
+                        min(box[0], k_box[0]),
+                        min(box[1], k_box[1]),
+                        max(box[2], k_box[2]),
+                        max(box[3], k_box[3])
+                    ]
+                    deduped[idx] = (lbl, max(conf, k_conf), new_box)
+                    merged_or_suppressed = True
+                    break
+            else:
+                # Cross-class overlap on same physical item: suppress lower confidence candidate
+                if iou > 0.25 or cont_cand_in_kept > 0.35 or cont_kept_in_cand > 0.35:
+                    merged_or_suppressed = True
+                    break
+
+        if not merged_or_suppressed:
+            deduped.append(cand)
+
+    # 4. Multi-Pass Chain Merging (unify any newly expanded boxes that now overlap)
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(deduped)):
+            for j in range(i + 1, len(deduped)):
+                l1, c1, b1 = deduped[i]
+                l2, c2, b2 = deduped[j]
+                if l1 == l2:
+                    iou = _box_iou(b1, b2)
+                    c1_in_2 = _box_containment(b1, b2)
+                    c2_in_1 = _box_containment(b2, b1)
+                    if iou > 0.10 or c1_in_2 > 0.25 or c2_in_1 > 0.25:
+                        new_box = [min(b1[0], b2[0]), min(b1[1], b2[1]), max(b1[2], b2[2]), max(b1[3], b2[3])]
+                        deduped[i] = (l1, max(c1, c2), new_box)
+                        deduped.pop(j)
+                        changed = True
+                        break
+            if changed:
+                break
+
+    # 5. Candidate Verification & Packaging Validation
+    detections: list[Detection] = []
+    for lbl, conf, box in deduped:
+        x1, y1, x2, y2 = box
+        crop_box = (max(0, int(x1)), max(0, int(y1)), min(w, int(x2)), min(h, int(y2)))
+        
+        # Guard against zero-area crop
+        if crop_box[2] <= crop_box[0] or crop_box[3] <= crop_box[1]:
+            continue
+
+        crop = rgb_img.crop(crop_box)
+
+        # For very low confidence (borderline noise < 0.20), cross-check guards
+        if conf < 0.20:
+            try:
                 from retail_classifier import verify_crop_matches_label
-                if verify_crop_matches_label(crop, label, min_matches=25) is False:
-                    logger.info(f"🛡️ [Verification Guard] Rejected out-of-domain candidate: {label} ({conf*100:.1f}%) on packaging descriptor mismatch")
-                    print(f"🛡️ [Verification Guard] Rejected out-of-domain candidate: {label} ({conf*100:.1f}%) on packaging descriptor mismatch")
+                v_res = verify_crop_matches_label(crop, lbl, min_matches=12)
+                c_res = _verify_color_signature(crop, lbl)
+                # Only suppress if both guards explicitly confirm mismatch
+                if v_res is False and c_res is False:
+                    logger.info(f"🛡️ [Verification Guard] Filtered low-confidence noise: {lbl} ({conf*100:.1f}%)")
                     continue
+            except Exception as e:
+                logger.warning(f"Verification guard check ignored: {e}")
 
-                # Fast Color Signature Guard (<0.5ms) - only run on borderline detections (<0.60)
-                if _verify_color_signature(crop, label) is False:
-                    logger.info(f"[Color Guard] Rejected: {label} ({conf*100:.1f}%) on non-matching package color")
-                    continue
+        prod_match = _match_db_product(lbl, user_id)
+        class_display_name = FRIENDLY_NAMES.get(lbl, lbl.replace("_", " ").title())
 
-            # Lookup catalog product match
-            prod_match = _match_db_product(label, user_id)
-            class_display_name = FRIENDLY_NAMES.get(label, label.replace("_", " ").title())
-
-            detections.append(Detection(
-                label=label,
-                class_name=class_display_name,
-                confidence=round(conf, 4),
-                bbox=[round(x1 / w, 4), round(y1 / h, 4),
-                      round(x2 / w, 4), round(y2 / h, 4)],
-                box=[int(x1), int(y1), int(x2), int(y2)],
-                product_match=prod_match
-            ))
+        detections.append(Detection(
+            label=lbl,
+            class_name=class_display_name,
+            confidence=round(conf, 4),
+            bbox=[round(x1 / w, 4), round(y1 / h, 4),
+                  round(x2 / w, 4), round(y2 / h, 4)],
+            box=[int(x1), int(y1), int(x2), int(y2)],
+            product_match=prod_match
+        ))
 
     # If YOLO produced no detections, apply fast visual package classifier
     if not detections:
@@ -334,7 +461,6 @@ def _run_inference(img: Image.Image, user_id: str, conf_threshold: float = 0.25)
         except Exception as e:
             logger.warning(f"Retail classifier fallback error: {e}")
 
-    # Sort by confidence descending
     detections.sort(key=lambda d: d.confidence, reverse=True)
 
     if detections:
@@ -362,26 +488,56 @@ async def detect_from_upload(
 ):
     """
     Accept a JPEG/PNG camera frame and return YOLO detections.
-    The Android app sends a camera preview frame here.
+    The Android app and Admin Portal send an image frame here.
     """
     try:
         contents = await file.read()
+        if not contents or len(contents) == 0:
+            raise HTTPException(status_code=400, detail="Uploaded image file is empty")
         if len(contents) > 25 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="Image size exceeds maximum limit of 25MB")
-        img = Image.open(io.BytesIO(contents))
-        img = ImageOps.exif_transpose(img)
+        try:
+            img = Image.open(io.BytesIO(contents))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid image format: {e}")
+
+        try:
+            transposed = ImageOps.exif_transpose(img)
+            if transposed is not None:
+                img = transposed
+        except Exception:
+            pass
+
         if img.mode != "RGB":
             img = img.convert("RGB")
+
+        orig_w, orig_h = img.width, img.height
+        if orig_w <= 0 or orig_h <= 0:
+            raise HTTPException(status_code=400, detail="Invalid image dimensions")
+
         if max(img.width, img.height) > 1920:
             img.thumbnail((1920, 1920), Image.Resampling.LANCZOS)
-        return _run_inference(img, user_id, conf_threshold=conf)
+
+        safe_conf = max(0.05, min(0.95, float(conf)))
+        res = _run_inference(img, user_id, conf_threshold=safe_conf)
+        scale_x = orig_w / float(img.width) if img.width > 0 else 1.0
+        scale_y = orig_h / float(img.height) if img.height > 0 else 1.0
+        for det in res.detections:
+            if det.box:
+                det.box = [
+                    int(round(det.box[0] * scale_x)),
+                    int(round(det.box[1] * scale_y)),
+                    int(round(det.box[2] * scale_x)),
+                    int(round(det.box[3] * scale_y)),
+                ]
+        return res
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Detection error: {e}")
-        raise HTTPException(status_code=400, detail=f"Invalid image: {e}")
+        raise HTTPException(status_code=400, detail=f"Detection failed: {e}")
 
 
 @router.post("/base64", response_model=DetectResponse, summary="Detect products from a base64 image")
@@ -395,24 +551,54 @@ async def detect_from_base64(
     """
     try:
         b64 = payload.get("image", "")
+        if not b64:
+            raise HTTPException(status_code=400, detail="Missing base64 image string")
         if len(b64) > 30 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="Image size exceeds maximum limit of 30MB")
         conf = float(payload.get("conf", 0.35))
-        img_bytes = base64.b64decode(b64)
-        img = Image.open(io.BytesIO(img_bytes))
-        img = ImageOps.exif_transpose(img)
+        try:
+            img_bytes = base64.b64decode(b64)
+            img = Image.open(io.BytesIO(img_bytes))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 image: {e}")
+
+        try:
+            transposed = ImageOps.exif_transpose(img)
+            if transposed is not None:
+                img = transposed
+        except Exception:
+            pass
+
         if img.mode != "RGB":
             img = img.convert("RGB")
+
+        orig_w, orig_h = img.width, img.height
+        if orig_w <= 0 or orig_h <= 0:
+            raise HTTPException(status_code=400, detail="Invalid image dimensions")
+
         if max(img.width, img.height) > 1920:
             img.thumbnail((1920, 1920), Image.Resampling.LANCZOS)
-        return _run_inference(img, user_id, conf_threshold=conf)
+
+        safe_conf = max(0.05, min(0.95, float(conf)))
+        res = _run_inference(img, user_id, conf_threshold=safe_conf)
+        scale_x = orig_w / float(img.width) if img.width > 0 else 1.0
+        scale_y = orig_h / float(img.height) if img.height > 0 else 1.0
+        for det in res.detections:
+            if det.box:
+                det.box = [
+                    int(round(det.box[0] * scale_x)),
+                    int(round(det.box[1] * scale_y)),
+                    int(round(det.box[2] * scale_x)),
+                    int(round(det.box[3] * scale_y)),
+                ]
+        return res
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Detection base64 error: {e}")
-        raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")
+        raise HTTPException(status_code=400, detail=f"Detection failed: {e}")
 
 
 @router.get("/classes", summary="List classes the YOLO model can detect")

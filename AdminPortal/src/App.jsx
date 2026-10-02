@@ -32,8 +32,8 @@ export default function App() {
       subtitle: '9 Indian festival discounts, smart FMCG upsell packages & margin simulator',
     },
     'ai-studio': {
-      title: 'Visual AI Studio & Test Bench',
-      subtitle: 'YOLOv11 retail detection pipeline, test image bench & class manager',
+      title: 'AI Vision Studio & Multi-Modal Lab',
+      subtitle: 'YOLOv11 object detection, ML Kit OCR packaging intelligence & hackathon barcode test lab',
     },
     settings: {
       title: 'Store & POS Terminal Settings',

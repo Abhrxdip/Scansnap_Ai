@@ -136,7 +136,7 @@ class ScanViewModel(
                 activeDetections = emptyList(),
                 detectedProduct = null,
                 detectedProductsList = emptyList(),
-                aiStatus = if (useOcr) "📝 Live Label & Price OCR Active" else "🔍 YOLO AI Scanner Active"
+                aiStatus = if (useOcr) "📝 Live Label & Price OCR Active" else "🔍 YOLO AI Object Detection Active"
             )
         }
     }
@@ -191,51 +191,38 @@ class ScanViewModel(
                 return@launch
             }
 
-            // 2. Dual Universal Scanner Pipeline
-            // Step A: Fast on-device packaging brand recognition via ML Kit (<15ms)
-            ocrScanner.processBitmap(
-                bitmap = bitmap,
-                onSuccess = { ocrResult ->
-                    viewModelScope.launch {
-                        val matched = matchOcrProduct(ocrResult)
-                        if (!matched) {
-                            // Step B: YOLO Multi-Object Visual Fallback
-                            val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.35f)
-                            if (result != null && result.detections.isNotEmpty()) {
-                                _uiState.update { it.copy(consecutiveFailedDetections = 0) }
-                                handleYoloMultiDetected(result.detections)
-                            } else {
-                                _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+            // 2. Mode Separation: OCR Mode vs Object/Image Detection Mode
+            if (_uiState.value.isOcrActive) {
+                // Dedicated OCR Mode: ML Kit Text, Brand & Price Extraction
+                ocrScanner.processBitmap(
+                    bitmap = bitmap,
+                    onSuccess = { ocrResult ->
+                        viewModelScope.launch {
+                            val matched = matchOcrProduct(ocrResult)
+                            if (!matched) {
+                                _uiState.update { it.copy(isProcessingFrame = false) }
                             }
                         }
+                    },
+                    onNotFound = {
+                        _uiState.update { it.copy(isProcessingFrame = false) }
+                    },
+                    onError = {
+                        _uiState.update { it.copy(isProcessingFrame = false) }
                     }
-                },
-                onNotFound = {
-                    // Step B: YOLO Multi-Object Visual Fallback
-                    viewModelScope.launch {
-                        val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.35f)
-                        if (result != null && result.detections.isNotEmpty()) {
-                            _uiState.update { it.copy(consecutiveFailedDetections = 0) }
-                            handleYoloMultiDetected(result.detections)
-                        } else {
-                            detectionStabilityMap.clear()
-                            latchedProductIds.clear()
-                            _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
-                        }
-                    }
-                },
-                onError = {
-                    viewModelScope.launch {
-                        val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.35f)
-                        if (result != null && result.detections.isNotEmpty()) {
-                            _uiState.update { it.copy(consecutiveFailedDetections = 0) }
-                            handleYoloMultiDetected(result.detections)
-                        } else {
-                            _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
-                        }
-                    }
+                )
+            } else {
+                // Pure Object & Image Detection Mode (YOLOv11 & Visual Classifier)
+                val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.35f)
+                if (result != null && result.detections.isNotEmpty()) {
+                    _uiState.update { it.copy(consecutiveFailedDetections = 0) }
+                    handleYoloMultiDetected(result.detections)
+                } else {
+                    detectionStabilityMap.clear()
+                    latchedProductIds.clear()
+                    _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
                 }
-            )
+            }
         }
     }
 

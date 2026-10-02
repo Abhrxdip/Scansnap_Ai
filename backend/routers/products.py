@@ -135,13 +135,40 @@ def get_product_by_barcode(
     user_id: CurrentUser,
     db: Session = Depends(get_db)
 ):
+    # 1. Search in user's inventory
     product = db.query(models.Product).filter(
         models.Product.user_id == user_id,
         models.Product.barcode == barcode
     ).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found for this barcode")
-    return product
+    if product:
+        return product
+
+    # 2. Fallback to any store inventory (e.g. demo_user or seeded batch)
+    fallback_product = db.query(models.Product).filter(
+        models.Product.barcode == barcode
+    ).first()
+    if fallback_product:
+        return fallback_product
+
+    # 3. Fallback to Master Catalog (117K database)
+    cat_item = db.query(models.MasterCatalog).filter(
+        models.MasterCatalog.barcode == barcode
+    ).first()
+    if cat_item:
+        return {
+            "id": cat_item.id or str(uuid.uuid4()),
+            "name": cat_item.name,
+            "category": cat_item.category or "Retail FMCG",
+            "price": cat_item.suggested_price or 25.0,
+            "stock": 50,
+            "low_stock_threshold": 5,
+            "barcode": cat_item.barcode,
+            "image_url": cat_item.image_url,
+            "created_at": None,
+            "updated_at": None
+        }
+
+    raise HTTPException(status_code=404, detail="Product not found for this barcode")
 
 
 @router.get("/{product_id}", response_model=schemas.ProductResponse)

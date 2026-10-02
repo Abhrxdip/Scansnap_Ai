@@ -37,23 +37,23 @@ NEW_DATASET_PRODUCTS = [
     },
     {
         "key": "cake",
-        "name": "Britannia Treat Chocolate Cake 65g",
+        "name": "Britannia Cake Gobbles Choco Chill 65g",
         "category": "Dairy & Bakery",
         "price": 30.0,
         "barcode": "8901063142018",
         "stock": 75,
         "low_stock_threshold": 10,
-        "aliases": ["Britannia Cake", "Chocolate Swiss Cake", "Treat Cake"]
+        "aliases": ["Britannia Cake Gobbles", "Britannia Treat Chocolate Cake", "Britannia Cake", "Gobbles Choco Chill"]
     },
     {
         "key": "cerave",
-        "name": "CeraVe Daily Moisturizing Lotion 236ml",
+        "name": "CeraVe Hydrating Cleanser 236ml",
         "category": "Personal Care & Hygiene",
         "price": 900.0,
         "barcode": "3337875597371",
         "stock": 40,
         "low_stock_threshold": 5,
-        "aliases": ["CeraVe Cream", "CeraVe Moisturizer", "CeraVe Lotion"]
+        "aliases": ["CeraVe Hydrating Cleanser", "CeraVe Daily Moisturizing Lotion", "CeraVe Cleanser", "CeraVe Lotion"]
     },
     {
         "key": "hns_shampoo",
@@ -97,13 +97,13 @@ NEW_DATASET_PRODUCTS = [
     },
     {
         "key": "wild_stone",
-        "name": "Wild Stone Code Platinum Body Perfume Spray 120ml",
+        "name": "Wild Stone Forest Spice Deodorant Soap 125g",
         "category": "Personal Care & Hygiene",
         "price": 70.0,
-        "barcode": "8904006301217",
+        "barcode": "8904006304218",
         "stock": 90,
         "low_stock_threshold": 12,
-        "aliases": ["Wild Stone Deodorant", "Wild Stone Spray", "Wild Stone Perfume"]
+        "aliases": ["Wild Stone Forest Spice Deodorant Soap", "Wild Stone Code Platinum Body Perfume", "Wild Stone Soap", "Wild Stone Deodorant"]
     },
 ]
 
