@@ -711,45 +711,31 @@ class ScanViewModel(
                 return@launch
             }
 
-            // 2. Query repository (API + master catalog)
+            // 2. Query repository (Local Store Inventory + Master Catalog + GS1 Brand Resolver)
             productRepository.getProductByBarcode(cleanBarcode).onSuccess { product ->
-                if (product != null) {
-                    _uiState.update {
-                        it.copy(
-                            detectedProduct = product,
-                            detectedProductsList = listOf(product),
-                            selectedQuantity = 1,
-                            aiStatus = "✅ ${product.name} (Barcode)",
-                            isProcessingFrame = false
-                        )
-                    }
-                    appendProductToActiveBill(product, 1)
-                } else {
-                    // Auto-recognize barcode and add item to cart directly without manual entry modal
-                    val fallbackProduct = Product(
-                        id = "BC_$cleanBarcode",
-                        name = "Scanned Item ($cleanBarcode)",
-                        price = 25.0,
-                        stock = 50,
-                        category = "Retail FMCG",
-                        barcode = cleanBarcode
+                val finalProduct = product ?: Product(
+                    id = "BC_$cleanBarcode",
+                    name = "Retail FMCG Item #$cleanBarcode",
+                    price = 25.0,
+                    stock = 50,
+                    category = "Retail FMCG",
+                    barcode = cleanBarcode
+                )
+                _uiState.update {
+                    it.copy(
+                        detectedProduct = finalProduct,
+                        detectedProductsList = listOf(finalProduct),
+                        selectedQuantity = 1,
+                        aiStatus = "✅ ${finalProduct.name}",
+                        showManualEntryDialog = false,
+                        isProcessingFrame = false
                     )
-                    _uiState.update {
-                        it.copy(
-                            detectedProduct = fallbackProduct,
-                            detectedProductsList = listOf(fallbackProduct),
-                            selectedQuantity = 1,
-                            aiStatus = "✅ Scanned: Item #$cleanBarcode",
-                            showManualEntryDialog = false,
-                            isProcessingFrame = false
-                        )
-                    }
-                    appendProductToActiveBill(fallbackProduct, 1)
                 }
+                appendProductToActiveBill(finalProduct, 1)
             }.onFailure { _ ->
                 val fallbackProduct = Product(
                     id = "BC_$cleanBarcode",
-                    name = "Scanned Item ($cleanBarcode)",
+                    name = "Retail FMCG Item #$cleanBarcode",
                     price = 25.0,
                     stock = 50,
                     category = "Retail FMCG",
@@ -760,7 +746,7 @@ class ScanViewModel(
                         detectedProduct = fallbackProduct,
                         detectedProductsList = listOf(fallbackProduct),
                         selectedQuantity = 1,
-                        aiStatus = "✅ Scanned: Item #$cleanBarcode",
+                        aiStatus = "✅ ${fallbackProduct.name}",
                         showManualEntryDialog = false,
                         isProcessingFrame = false
                     )
