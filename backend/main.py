@@ -1,3 +1,4 @@
+import os
 import uuid
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,10 +19,8 @@ app = FastAPI(
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")
 if ALLOWED_ORIGINS:
     origins = [o.strip() for o in ALLOWED_ORIGINS.split(",")]
-elif os.getenv("DEV_AUTH_BYPASS", "").lower() == "true":
-    origins = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173"]
 else:
-    origins = []
+    origins = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"]
 
 app.add_middleware(
     CORSMiddleware,
