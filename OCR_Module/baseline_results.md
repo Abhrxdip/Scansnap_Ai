@@ -1,0 +1,13 @@
+## Baseline Benchmark Results
+- **Existing test count:** 16
+- **Pass count (SKU Match):** 16
+- **Failure count (SKU Match):** 0
+- **SKU accuracy:** 100.00%
+- **MRP accuracy:** 100.00%
+- **Unit accuracy:** 100.00%
+- **False positives:** 0
+- **False negatives:** 0
+- **Average processing time:** 14.19 ms
+- **p50 latency:** 14.43 ms
+- **p95 latency:** 19.21 ms
+- **p99 latency:** 19.21 ms

@@ -48,7 +48,7 @@ MASTER_CATALOG = [
         "category": "Dairy & Bakery",
         "suggested_price": 30.0,
         "barcode": "8901262010014",
-        "aliases": ["amul ice cream", "vanilla magic", "amul cup", "amul vanilla"],
+        "aliases": ["amul ice cream", "vanilla magic", "amul cup", "amul vanilla", "amul"],
         "color": "BLUE",
         "typical_units": ["100ml", "500ml", "1L"]
     },
@@ -210,9 +210,11 @@ FONT_ALIASES_MAP = {
     "kurkure": "kurkure", "kur kure": "kurkure",
     "dettol": "dettol", "detol": "dettol",
     "colgate": "colgate", "colgat": "colgate",
-    "thumsup": "thums up", "thums-up": "thums up",
+    "thumsup": "thums up", "thums-up": "thums up", "thum s up": "thums up",
     "cerave lotion": "cerave", "cerave cleanser": "cerave",
-    "hns": "head & shoulders", "head and shoulders": "head & shoulders"
+    "hns": "head & shoulders", "head and shoulders": "head & shoulders",
+    "magg1": "maggi", "m4ggi": "maggi",
+    "bourb0n": "bourbon"
 }
 
 NOISE_WORDS = {
@@ -249,8 +251,8 @@ ANTI_CONFUSION_PAIRS = [
 ]
 
 # ── 3. Regex Parsers ─────────────────────────────────────────────────────────
-PRICE_REGEX = re.compile(r'(?:₹|MRP|Rs\.?|INR)\s*[:\.]?\s*(\d+(?:\.\d{1,2})?)', re.IGNORECASE)
-QUANTITY_REGEX = re.compile(r'\b(\d+(?:\.\d+)?\s*(?:kg|g|gm|l|ml|ltr|litre|pack|pc|pcs|pouch|sachet))\b', re.IGNORECASE)
+PRICE_REGEX = re.compile(r'(?:₹|M\s*R\s*P|Rs\.?|INR)\s*[:\.]?\s*(?:₹|Rs\.?)?\s*(\d+(?:\.\d{1,2})?)', re.IGNORECASE)
+QUANTITY_REGEX = re.compile(r'\b([0-9oO]+(?:\.[0-9oO]+)?\s*(?:kg|g|gm|l|ml|ltr|litre|pack|pc|pcs|pouch|sachet))\b', re.IGNORECASE)
 
 
 # ── 4. Fuzzy & Distance Math ────────────────────────────────────────────────
@@ -292,6 +294,9 @@ class OcrPipeline:
 
     def clean_text_tokens(self, text: str) -> Tuple[List[str], str]:
         """Strips noise words and applies font alias mappings."""
+        # Merge isolated single characters (e.g., M A G G 1 -> MAGG1)
+        text = re.sub(r'(?<!\S)(\w)(?:\s+(\w))+(?!\S)', lambda m: m.group(0).replace(' ', ''), text)
+        
         raw_tokens = re.split(r'[\s\-_\,\.\:\;\|]+', text.strip())
         cleaned = []
         for t in raw_tokens:
@@ -324,7 +329,13 @@ class OcrPipeline:
     def extract_unit(self, text: str) -> Optional[str]:
         match = QUANTITY_REGEX.search(text)
         if match:
-            return match.group(1).upper()
+            unit_str = match.group(1).upper().replace(" ", "")
+            num_match = re.match(r'^[0-9O\.]+', unit_str)
+            if num_match:
+                num_part = num_match.group(0).replace('O', '0')
+                rest_part = unit_str[len(num_match.group(0)):]
+                return num_part + rest_part
+            return unit_str
         return None
 
     def match_product(self, raw_text: str, detected_color: Optional[str] = None) -> Dict[str, Any]:
@@ -387,7 +398,20 @@ class OcrPipeline:
         candidates.sort(key=lambda x: x["score"], reverse=True)
 
         best = candidates[0] if candidates else None
+        
         if best and best["score"] >= 0.40:
+            if len(candidates) > 1:
+                second = candidates[1]
+                if second["score"] >= 0.40 and (best["score"] - second["score"]) < 0.10:
+                    return {
+                        "status": "AMBIGUOUS",
+                        "extracted_price": mrp,
+                        "extracted_unit": unit,
+                        "cleaned_query": cleaned_query,
+                        "top_candidate": best["item"]["name"],
+                        "candidate_confidence": best["score"]
+                    }
+
             matched_item = best["item"]
             return {
                 "status": "MATCHED",
