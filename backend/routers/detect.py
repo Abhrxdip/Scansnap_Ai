@@ -11,7 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
 
 router = APIRouter(prefix="/detect", tags=["YOLO Detection"])
@@ -366,11 +366,14 @@ async def detect_from_upload(
     """
     try:
         contents = await file.read()
-        if len(contents) > 4 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="Image size exceeds maximum limit of 4MB")
+        if len(contents) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Image size exceeds maximum limit of 25MB")
         img = Image.open(io.BytesIO(contents))
-        if img.width > 2000 or img.height > 2000:
-            raise HTTPException(status_code=400, detail="Image dimensions exceed maximum limit of 2000x2000")
+        img = ImageOps.exif_transpose(img)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        if max(img.width, img.height) > 1920:
+            img.thumbnail((1920, 1920), Image.Resampling.LANCZOS)
         return _run_inference(img, user_id, conf_threshold=conf)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -392,13 +395,16 @@ async def detect_from_base64(
     """
     try:
         b64 = payload.get("image", "")
-        if len(b64) > 6 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="Image size exceeds maximum limit of 6MB")
+        if len(b64) > 30 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Image size exceeds maximum limit of 30MB")
         conf = float(payload.get("conf", 0.35))
         img_bytes = base64.b64decode(b64)
         img = Image.open(io.BytesIO(img_bytes))
-        if img.width > 2000 or img.height > 2000:
-            raise HTTPException(status_code=400, detail="Image dimensions exceed maximum limit of 2000x2000")
+        img = ImageOps.exif_transpose(img)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        if max(img.width, img.height) > 1920:
+            img.thumbnail((1920, 1920), Image.Resampling.LANCZOS)
         return _run_inference(img, user_id, conf_threshold=conf)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))

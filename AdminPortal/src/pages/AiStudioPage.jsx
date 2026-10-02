@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Sparkles, 
   Upload, 
@@ -7,12 +7,56 @@ import {
   Sliders, 
   CheckCircle2, 
   AlertCircle, 
-  RefreshCw,
-  Box,
-  Image as ImageIcon,
-  Check
+  RefreshCw, 
+  Box, 
+  Image as ImageIcon, 
+  Check,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Download,
+  Tag,
+  Maximize2
 } from 'lucide-react';
 import { detectObjectsInImage } from '../api/client';
+
+const BOX_COLORS = [
+  '#10B981', // Emerald
+  '#3B82F6', // Blue
+  '#F59E0B', // Amber
+  '#EC4899', // Pink
+  '#8B5CF6', // Purple
+  '#06B6D4', // Cyan
+  '#EF4444', // Red
+  '#14B8A6'  // Teal
+];
+
+function hexToRgba(hex, alpha) {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, radius);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+}
 
 export default function AiStudioPage() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -20,7 +64,12 @@ export default function AiStudioPage() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionResult, setDetectionResult] = useState(null);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.35);
-  const [activeTab, setActiveTab] = useState('bench'); // 'bench' | 'classes' | 'train'
+  const [activeTab, setActiveTab] = useState('bench'); // 'bench' | 'classes'
+  
+  // Interactive canvas states
+  const [zoom, setZoom] = useState(1.0);
+  const [showLabels, setShowLabels] = useState(true);
+  const [hoveredIdx, setHoveredIdx] = useState(null);
 
   const canvasRef = useRef(null);
 
@@ -50,63 +99,211 @@ export default function AiStudioPage() {
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
     setDetectionResult(null);
+    setZoom(1.0);
+    setHoveredIdx(null);
   };
 
-  const drawDetections = (res, threshold) => {
-    if (!res || !previewUrl) return;
+  const drawDetections = (res, threshold, hIdx = hoveredIdx, labelsOn = showLabels) => {
+    if (!previewUrl) return;
     const img = new Image();
     img.src = previewUrl;
     img.onload = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
-      canvas.width = img.width;
-      canvas.height = img.height;
+      
+      const imgW = img.naturalWidth || img.width;
+      const imgH = img.naturalHeight || img.height;
+      canvas.width = imgW;
+      canvas.height = imgH;
 
-      // Draw original image
-      ctx.drawImage(img, 0, 0);
+      // Draw clean source image without distortion
+      ctx.drawImage(img, 0, 0, imgW, imgH);
 
-      // Draw bounding boxes for all detections above the slider threshold
-      const detections = res.detections || [];
-      const colors = ['#10B981', '#3B82F6', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4'];
+      if (!res || !res.detections) return;
+
+      const detections = res.detections;
+      const strokeW = Math.max(3, Math.round(imgW / 260));
+      const fontSize = Math.min(20, Math.max(13, Math.round(imgW / 65)));
+      const cornerLen = Math.min(30, Math.max(14, Math.round(imgW / 45)));
 
       detections.forEach((det, idx) => {
         if (det.confidence < threshold) return;
 
-        const [x1, y1, x2, y2] = det.box || (det.bbox ? [det.bbox[0] * img.width, det.bbox[1] * img.height, det.bbox[2] * img.width, det.bbox[3] * img.height] : [0, 0, 0, 0]);
+        const isHovered = hIdx === idx;
+        const hasHover = hIdx !== null;
+        
+        let [x1, y1, x2, y2] = det.box || (det.bbox ? [
+          det.bbox[0] * imgW, 
+          det.bbox[1] * imgH, 
+          det.bbox[2] * imgW, 
+          det.bbox[3] * imgH
+        ] : [0, 0, 0, 0]);
+
+        // Keep inside bounds
+        x1 = Math.max(0, Math.min(imgW - 1, x1));
+        y1 = Math.max(0, Math.min(imgH - 1, y1));
+        x2 = Math.max(x1 + 4, Math.min(imgW, x2));
+        y2 = Math.max(y1 + 4, Math.min(imgH, y2));
         const w = x2 - x1;
         const h = y2 - y1;
-        const color = colors[idx % colors.length];
+        const color = BOX_COLORS[idx % BOX_COLORS.length];
+
+        ctx.save();
+
+        if (hasHover && !isHovered) {
+          ctx.globalAlpha = 0.35;
+        }
+
+        // Bounding Box Glow on hover
+        if (isHovered) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 16;
+        }
 
         // Box border
-        ctx.lineWidth = Math.max(3, Math.round(img.width / 250));
+        ctx.lineWidth = isHovered ? strokeW + 2 : strokeW;
         ctx.strokeStyle = color;
         ctx.strokeRect(x1, y1, w, h);
 
-        // Box background highlight
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+        // Highlight box interior
+        ctx.fillStyle = isHovered ? hexToRgba(color, 0.22) : hexToRgba(color, 0.10);
         ctx.fillRect(x1, y1, w, h);
 
-        // Label pill
-        const label = `${det.class_name || det.label} (${(det.confidence * 100).toFixed(0)}%)`;
-        const fontSize = Math.max(14, Math.round(img.width / 40));
-        ctx.font = `bold ${fontSize}px sans-serif`;
-        const textWidth = ctx.measureText(label).width;
+        // Corner bracket accents (HUD style)
+        ctx.lineWidth = strokeW + 1.5;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.beginPath();
+        // Top-left
+        ctx.moveTo(x1, y1 + cornerLen);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x1 + cornerLen, y1);
+        // Top-right
+        ctx.moveTo(x2 - cornerLen, y1);
+        ctx.lineTo(x2, y1);
+        ctx.lineTo(x2, y1 + cornerLen);
+        // Bottom-left
+        ctx.moveTo(x1, y2 - cornerLen);
+        ctx.lineTo(x1, y2);
+        ctx.lineTo(x1 + cornerLen, y2);
+        // Bottom-right
+        ctx.moveTo(x2 - cornerLen, y2);
+        ctx.lineTo(x2, y2);
+        ctx.lineTo(x2, y2 - cornerLen);
+        ctx.stroke();
 
-        ctx.fillStyle = '#0A0A0A';
-        ctx.fillRect(x1, Math.max(0, y1 - fontSize - 10), textWidth + 16, fontSize + 10);
+        // High-clarity badge
+        if (labelsOn) {
+          const rawName = det.class_name || det.label;
+          const displayName = rawName.length > 26 ? rawName.substring(0, 24) + '…' : rawName;
+          const confText = `${(det.confidence * 100).toFixed(0)}%`;
 
-        ctx.fillStyle = '#FFFDF7';
-        ctx.fillText(label, x1 + 8, Math.max(fontSize, y1 - 6));
+          ctx.font = `600 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+          const nameMetrics = ctx.measureText(displayName);
+          ctx.font = `bold ${Math.max(11, fontSize - 2)}px Inter, system-ui, -apple-system, sans-serif`;
+          const confMetrics = ctx.measureText(confText);
+
+          const padX = Math.round(fontSize * 0.55);
+          const padY = Math.round(fontSize * 0.35);
+          const badgeH = fontSize + (padY * 2);
+          const badgeW = nameMetrics.width + confMetrics.width + (padX * 3.5) + (fontSize * 0.7);
+
+          // Smart placement: never cut off top or right
+          let badgeY = (y1 - badgeH - 6 < 0) ? (y1 + 6) : (y1 - badgeH - 6);
+          let badgeX = Math.max(4, Math.min(x1, imgW - badgeW - 4));
+
+          // Draw Badge Container
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+          ctx.shadowBlur = 10;
+          ctx.fillStyle = '#0F172A';
+          drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 6);
+          ctx.fill();
+
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Left indicator dot
+          const dotRadius = Math.round(fontSize * 0.28);
+          const dotX = badgeX + padX + dotRadius;
+          const dotY = badgeY + (badgeH / 2);
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Text label
+          const textX = dotX + dotRadius + Math.round(fontSize * 0.4);
+          const textY = badgeY + padY + fontSize - 2;
+          ctx.font = `600 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillText(displayName, textX, textY);
+
+          // Confidence pill
+          const confW = confMetrics.width + (padX * 1.2);
+          const confH = badgeH - 6;
+          const confX = badgeX + badgeW - confW - 4;
+          const confY = badgeY + 3;
+
+          ctx.fillStyle = color;
+          drawRoundedRect(ctx, confX, confY, confW, confH, 4);
+          ctx.fill();
+
+          ctx.font = `bold ${Math.max(11, fontSize - 2)}px Inter, system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = '#0A0A0A';
+          ctx.fillText(confText, confX + (padX * 0.6), confY + confH - 3);
+        }
+
+        ctx.restore();
       });
     };
   };
 
+  // Re-draw when threshold or hovered detection changes
+  useEffect(() => {
+    if (detectionResult) {
+      drawDetections(detectionResult, confidenceThreshold, hoveredIdx, showLabels);
+    }
+  }, [confidenceThreshold, hoveredIdx, showLabels, previewUrl]);
+
   const handleThresholdChange = (val) => {
     setConfidenceThreshold(val);
-    if (detectionResult) {
-      drawDetections(detectionResult, val);
-    }
+  };
+
+  const handleRotateClockwise = () => {
+    if (!previewUrl) return;
+    const img = new Image();
+    img.src = previewUrl;
+    img.onload = () => {
+      const rotCanvas = document.createElement('canvas');
+      rotCanvas.width = img.height;
+      rotCanvas.height = img.width;
+      const rCtx = rotCanvas.getContext('2d');
+      rCtx.translate(rotCanvas.width / 2, rotCanvas.height / 2);
+      rCtx.rotate((90 * Math.PI) / 180);
+      rCtx.drawImage(img, -img.width / 2, -img.height / 2);
+
+      rotCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const newFile = new File([blob], selectedFile?.name || 'rotated.jpg', { type: 'image/jpeg' });
+        setSelectedFile(newFile);
+        const newUrl = URL.createObjectURL(blob);
+        setPreviewUrl(newUrl);
+        setDetectionResult(null);
+        setZoom(1.0);
+        setHoveredIdx(null);
+      }, 'image/jpeg', 0.95);
+    };
+  };
+
+  const handleDownloadAnnotated = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `scansnap_detection_${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
   };
 
   const runDetection = async () => {
@@ -114,13 +311,12 @@ export default function AiStudioPage() {
 
     try {
       setIsDetecting(true);
-      // Query backend with a sensitive base threshold so all simultaneous objects are returned
       const res = await detectObjectsInImage(selectedFile, 0.20);
       setDetectionResult(res);
-      drawDetections(res, confidenceThreshold);
+      drawDetections(res, confidenceThreshold, null, showLabels);
     } catch (err) {
       console.error(err);
-      alert('Detection failed. Please check backend server status.');
+      alert(err.message || 'Detection failed. Please check backend server status.');
     } finally {
       setIsDetecting(false);
     }
@@ -143,13 +339,13 @@ export default function AiStudioPage() {
       >
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#8B5CF6', color: '#FFF', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '8px' }}>
-            <Sparkles size={12} color="#FFF" /> YOLOv8 Computer Vision Engine
+            <Sparkles size={12} color="#FFF" /> YOLOv11 Computer Vision Engine
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#0A0A0A' }}>
             Visual AI Studio & Test Bench
           </h2>
           <p style={{ fontSize: '13px', color: '#4C1D95', fontWeight: 600, marginTop: '4px' }}>
-            Active Model: <code>best.pt</code> (3.2 MB) | Inference Device: CPU / DirectML | Input Resolution: 640x640
+            Active Model: <code>best.pt</code> | Multi-Product Detection & Packshot Descriptor Verification
           </p>
         </div>
 
@@ -171,7 +367,7 @@ export default function AiStudioPage() {
       </div>
 
       {activeTab === 'bench' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '24px', alignItems: 'start' }}>
           {/* Left panel: Upload & Controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div className="neu-box" style={{ padding: '24px' }}>
@@ -182,7 +378,7 @@ export default function AiStudioPage() {
               <div style={{ border: '2px dashed #0A0A0A', borderRadius: '10px', padding: '24px', textAlign: 'center', background: '#FFFDF7' }}>
                 <ImageIcon size={36} style={{ margin: '0 auto 8px', color: '#8B5CF6' }} />
                 <p style={{ fontSize: '13px', fontWeight: 700 }}>Upload Shelf or Product Image</p>
-                <p style={{ fontSize: '11px', color: '#666', margin: '4px 0 14px' }}>Supports JPG, PNG (e.g. photos taken from mobile or counter webcam)</p>
+                <p style={{ fontSize: '11px', color: '#666', margin: '4px 0 14px' }}>Supports JPG, PNG (phones, webcam, counter frames)</p>
 
                 <input 
                   type="file" 
@@ -249,17 +445,12 @@ export default function AiStudioPage() {
                 <h4 style={{ fontSize: '14px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '12px' }}>
                   Detection Summary
                 </h4>
-
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                     <span style={{ color: '#666' }}>Detected Items:</span>
                     <strong>
                       {(detectionResult.detections || []).filter(d => d.confidence >= confidenceThreshold).length} objects
                     </strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: '#666' }}>Inference Latency:</span>
-                    <strong>~140 ms</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                     <span style={{ color: '#666' }}>Matched Products:</span>
@@ -273,75 +464,243 @@ export default function AiStudioPage() {
           </div>
 
           {/* Right panel: Visual Canvas Display */}
-          <div className="neu-box" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '14px' }}>
-              2. Visual Detection Canvas
-            </h3>
+          <div className="neu-box" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 800 }}>
+                2. Visual Detection Canvas
+              </h3>
+              {detectionResult && (
+                <span style={{ fontSize: '12px', color: '#666', fontWeight: 600 }}>
+                  Showing objects with &ge; {(confidenceThreshold * 100).toFixed(0)}% confidence
+                </span>
+              )}
+            </div>
 
+            {/* Main Canvas Container */}
             <div style={{ 
-              flex: 1, 
-              minHeight: '400px', 
-              background: '#0A0A0A', 
+              width: '100%',
+              minHeight: '440px', 
+              background: '#0B0F19', 
               border: '2px solid #0A0A0A', 
               borderRadius: '10px', 
               display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              overflow: 'hidden',
-              position: 'relative'
+              flexDirection: 'column',
+              position: 'relative',
+              overflow: 'hidden'
             }}>
-              {!previewUrl ? (
-                <div style={{ textAlign: 'center', color: '#777', padding: '30px' }}>
-                  <Box size={44} style={{ margin: '0 auto 12px', color: '#555' }} />
-                  <p style={{ fontWeight: 700, color: '#AAA' }}>No image selected</p>
-                  <p style={{ fontSize: '12px', color: '#666' }}>Select an image from the left panel to test vision detection</p>
+              {/* Canvas Interactive Toolbar */}
+              {previewUrl && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 14px',
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  borderBottom: '1px solid #1E293B',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  zIndex: 10
+                }}>
+                  {/* Zoom Controls */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', marginRight: '4px' }}>
+                      Zoom:
+                    </span>
+                    <button 
+                      onClick={() => setZoom(z => Math.max(0.4, Number((z - 0.2).toFixed(1))))}
+                      className="neu-btn neu-btn-sm"
+                      style={{ padding: '3px 8px', fontSize: '11px', background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' }}
+                      title="Zoom Out"
+                    >
+                      <ZoomOut size={12} />
+                    </button>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#38BDF8', minWidth: '42px', textAlign: 'center' }}>
+                      {Math.round(zoom * 100)}%
+                    </span>
+                    <button 
+                      onClick={() => setZoom(z => Math.min(2.5, Number((z + 0.2).toFixed(1))))}
+                      className="neu-btn neu-btn-sm"
+                      style={{ padding: '3px 8px', fontSize: '11px', background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' }}
+                      title="Zoom In"
+                    >
+                      <ZoomIn size={12} />
+                    </button>
+                    <button 
+                      onClick={() => setZoom(1.0)}
+                      className="neu-btn neu-btn-sm"
+                      style={{ padding: '3px 8px', fontSize: '11px', background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' }}
+                      title="Fit to Container"
+                    >
+                      Fit
+                    </button>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                      onClick={handleRotateClockwise}
+                      className="neu-btn neu-btn-sm"
+                      style={{ padding: '4px 10px', fontSize: '11px', background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' }}
+                      title="Rotate Image 90° Clockwise"
+                    >
+                      <RotateCw size={12} /> Rotate 90°
+                    </button>
+                    <button 
+                      onClick={() => setShowLabels(v => !v)}
+                      className="neu-btn neu-btn-sm"
+                      style={{ 
+                        padding: '4px 10px', 
+                        fontSize: '11px', 
+                        background: showLabels ? '#8B5CF6' : '#1E293B', 
+                        color: '#FFF', 
+                        border: '1px solid #334155' 
+                      }}
+                      title="Toggle Product Label Badges"
+                    >
+                      <Tag size={12} /> {showLabels ? 'Labels ON' : 'Labels OFF'}
+                    </button>
+                    <button 
+                      onClick={handleDownloadAnnotated}
+                      className="neu-btn neu-btn-sm"
+                      style={{ padding: '4px 10px', fontSize: '11px', background: '#10B981', color: '#0A0A0A', border: '1px solid #059669', fontWeight: 800 }}
+                      title="Save Annotated Image as PNG"
+                    >
+                      <Download size={12} /> Save PNG
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <canvas 
-                  ref={canvasRef} 
-                  style={{ maxWidth: '100%', maxHeight: '480px', objectFit: 'contain' }} 
-                />
               )}
+
+              {/* Viewport Area */}
+              <div style={{ 
+                flex: 1, 
+                minHeight: '380px',
+                maxHeight: '600px',
+                overflow: 'auto',
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: '16px',
+                background: 'radial-gradient(circle at center, #1E293B 0%, #0B0F19 100%)'
+              }}>
+                {!previewUrl ? (
+                  <div style={{ textAlign: 'center', color: '#777', padding: '30px' }}>
+                    <Box size={44} style={{ margin: '0 auto 12px', color: '#555' }} />
+                    <p style={{ fontWeight: 700, color: '#AAA' }}>No image selected</p>
+                    <p style={{ fontSize: '12px', color: '#666' }}>Select an image from the left panel to test vision detection</p>
+                  </div>
+                ) : (
+                  <div style={{
+                    transform: `scale(${zoom})`,
+                    transformOrigin: 'center center',
+                    transition: 'transform 0.15s ease-out',
+                    maxWidth: '100%',
+                    display: 'flex',
+                    justifyContent: 'center'
+                  }}>
+                    <canvas 
+                      ref={canvasRef} 
+                      style={{ 
+                        maxWidth: '100%', 
+                        height: 'auto', 
+                        display: 'block',
+                        borderRadius: '6px',
+                        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
+                      }} 
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* List of detected objects */}
             {detectionResult?.detections && (
-              <div style={{ marginTop: '20px' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '10px' }}>
-                  Detected Objects Breakdown:
+              <div style={{ marginTop: '12px' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>Detected Objects Breakdown:</span>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#666' }}>
+                    (Hover any item to highlight on canvas)
+                  </span>
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {detectionResult.detections
                     .filter(det => det.confidence >= confidenceThreshold)
-                    .map((det, idx) => (
-                    <div 
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 14px',
-                        border: '1.5px solid #0A0A0A',
-                        borderRadius: '8px',
-                        background: '#FFFDF7',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#10B981' }} />
-                        <span style={{ fontWeight: 800, fontSize: '13px' }}>{det.class_name}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span className="neu-badge neu-badge-green">
-                          {(det.confidence * 100).toFixed(1)}% Confidence
-                        </span>
-                        {det.product_match && (
-                          <span style={{ fontWeight: 900, fontFamily: 'var(--font-heading)' }}>
-                            ₹{det.product_match.price}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    .map((det, idx) => {
+                      const itemColor = BOX_COLORS[idx % BOX_COLORS.length];
+                      const isHovered = hoveredIdx === idx;
+                      return (
+                        <div 
+                          key={idx}
+                          onMouseEnter={() => setHoveredIdx(idx)}
+                          onMouseLeave={() => setHoveredIdx(null)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 16px',
+                            border: isHovered ? `2px solid ${itemColor}` : '1.5px solid #0A0A0A',
+                            borderRadius: '8px',
+                            background: isHovered ? '#F0FDF4' : '#FFFDF7',
+                            boxShadow: isHovered ? `0 4px 12px ${hexToRgba(itemColor, 0.2)}` : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            {/* Color Dot matching canvas box */}
+                            <span 
+                              style={{ 
+                                width: '14px', 
+                                height: '14px', 
+                                borderRadius: '4px', 
+                                background: itemColor,
+                                border: '1px solid #0A0A0A',
+                                flexShrink: 0
+                              }} 
+                            />
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '13px', color: '#0A0A0A' }}>
+                                {det.class_name || det.label}
+                              </div>
+                              {det.product_match?.category && (
+                                <div style={{ fontSize: '11px', color: '#666', fontWeight: 600, marginTop: '2px' }}>
+                                  {det.product_match.category} • Barcode: {det.product_match.barcode || 'N/A'}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            {/* Confidence Pill with mini bar */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                              <span 
+                                style={{ 
+                                  padding: '2px 8px', 
+                                  borderRadius: '4px', 
+                                  fontSize: '11px', 
+                                  fontWeight: 800, 
+                                  background: itemColor, 
+                                  color: '#0A0A0A',
+                                  border: '1px solid #0A0A0A'
+                                }}
+                              >
+                                {(det.confidence * 100).toFixed(1)}% Confidence
+                              </span>
+                              <div style={{ width: '80px', height: '4px', background: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
+                                <div style={{ width: `${Math.min(100, Math.round(det.confidence * 100))}%`, height: '100%', background: itemColor }} />
+                              </div>
+                            </div>
+
+                            {/* Price */}
+                            {det.product_match && (
+                              <span style={{ fontWeight: 900, fontFamily: 'var(--font-heading)', fontSize: '16px', minWidth: '60px', textAlign: 'right' }}>
+                                ₹{det.product_match.price}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}

@@ -65,7 +65,10 @@ export async function detectObjectsInImage(file, conf = 0.25) {
     method: 'POST',
     body: formData,
   });
-  if (!res.ok) throw new Error('Detection failed');
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || 'Detection failed');
+  }
   return res.json();
 }
 
