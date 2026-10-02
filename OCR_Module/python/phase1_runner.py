@@ -130,6 +130,7 @@ def run():
             elif exp_id is not None and matched_id is None:
                 false_negatives += 1
                 failure_patterns.append("False Negative Match")
+                print(f"FN MATCH: {t['test_id']} | Input: {t['raw_ocr']} | Expected: {exp_id} | Status: {status} | Top: {res.get('top_candidate')} ({res.get('candidate_confidence',0):.3f})")
                 if not is_stress:
                     bugs.append({"id": t["test_id"], "cat": "BUG-MATCHING", "sev": "HIGH", "desc": f"Expected {exp_id}, got None"})
             else:

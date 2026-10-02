@@ -210,7 +210,7 @@ FONT_ALIASES_MAP = {
     "kurkure": "kurkure", "kur kure": "kurkure",
     "dettol": "dettol", "detol": "dettol",
     "colgate": "colgate", "colgat": "colgate",
-    "thumsup": "thums up", "thums-up": "thums up", "thum s up": "thums up",
+    "thumsup": "thums up", "thums-up": "thums up", "thum s up": "thums up", "thum up": "thums up",
     "cerave lotion": "cerave", "cerave cleanser": "cerave",
     "hns": "head & shoulders", "head and shoulders": "head & shoulders",
     "magg1": "maggi", "m4ggi": "maggi",
@@ -250,9 +250,16 @@ ANTI_CONFUSION_PAIRS = [
     ("soya sticks", "surf excel")
 ]
 
-# ── 3. Regex Parsers ─────────────────────────────────────────────────────────
-PRICE_REGEX = re.compile(r'(?:₹|M\s*R\s*P|Rs\.?|INR)\s*[:\.]?\s*(?:₹|Rs\.?)?\s*(\d+(?:\.\d{1,2})?)', re.IGNORECASE)
+# ── 3. Regex Parsers & Generics ────────────────────────────────────────────────
+PRICE_REGEX = re.compile(r'(?:₹|M\.?\s*R\.?\s*P\.?|Rs\.?|INR)\s*[:\.\-]?\s*(?:₹|Rs\.?)?\s*(\d+(?:\.\d{1,2})?)', re.IGNORECASE)
 QUANTITY_REGEX = re.compile(r'\b([0-9oO]+(?:\.[0-9oO]+)?\s*(?:kg|g|gm|l|ml|ltr|litre|pack|pc|pcs|pouch|sachet))\b', re.IGNORECASE)
+
+GENERIC_TOKENS = {
+    "biscuits", "chocolate", "masala", "noodles", "juice", "beverage", 
+    "can", "original", "charged", "bar", "munch", "sparkling", "apple",
+    "snack", "drink", "water", "chips", "crisps", "2-minute",
+    "britannia", "cadbury", "nestle", "parle", "amul", "haldiram"
+}
 
 
 # ── 4. Fuzzy & Distance Math ────────────────────────────────────────────────
@@ -297,24 +304,22 @@ class OcrPipeline:
         # Merge isolated single characters (e.g., M A G G 1 -> MAGG1)
         text = re.sub(r'(?<!\S)(\w)(?:\s+(\w))+(?!\S)', lambda m: m.group(0).replace(' ', ''), text)
         
-        raw_tokens = re.split(r'[\s\-_\,\.\:\;\|]+', text.strip())
+        text_lower = text.strip().lower()
+        # Check phrase aliases FIRST
+        for phrase, replacement in FONT_ALIASES_MAP.items():
+            if phrase in text_lower:
+                text_lower = text_lower.replace(phrase, replacement)
+        
+        raw_tokens = re.split(r'[\s\-_\,\.\:\;\|]+', text_lower)
         cleaned = []
         for t in raw_tokens:
-            token_clean = t.lower()
-            if not token_clean or len(token_clean) < 2:
+            if not t or len(t) < 2:
                 continue
-            if token_clean in NOISE_WORDS:
+            if t in NOISE_WORDS:
                 continue
-            # Apply alias replacement if found
-            token_mapped = FONT_ALIASES_MAP.get(token_clean, token_clean)
-            cleaned.append(token_mapped)
+            cleaned.append(t)
 
         normalized_string = " ".join(cleaned)
-        # Check phrase aliases
-        for phrase, replacement in FONT_ALIASES_MAP.items():
-            if phrase in normalized_string:
-                normalized_string = normalized_string.replace(phrase, replacement)
-
         return cleaned, normalized_string
 
     def extract_mrp(self, text: str) -> Optional[float]:
@@ -364,19 +369,50 @@ class OcrPipeline:
 
             # Calculate similarity scores
             # 1. Alias exact/substring hit
-            alias_hit = any(alias in cleaned_query for alias in sku_aliases)
+            alias_hit = False
+            for alias in sku_aliases:
+                if char_similarity(cleaned_query, alias) > 0.85:
+                    alias_hit = True
+                    break
+                if " " in alias and re.search(r'\b' + re.escape(alias) + r'\b', cleaned_query):
+                    alias_hit = True
+                    break
+                    
             alias_score = 0.95 if alias_hit else 0.0
 
             # 2. Token overlap score
             target_tokens = set(re.split(r'[\s\-_\,\.\:\;]+', sku_name.lower()))
-            overlap_count = sum(1 for t in tokens if t in target_tokens or any(char_similarity(t, tt) > 0.82 for tt in target_tokens))
+            
+            matched_tokens = []
+            for t in tokens:
+                for tt in target_tokens:
+                    if t == tt or char_similarity(t, tt) > 0.82:
+                        matched_tokens.append(tt)
+                        break
+                        
+            overlap_count = len(matched_tokens)
+            distinctive_matches = [t for t in matched_tokens if t not in GENERIC_TOKENS]
+            
             token_score = (overlap_count / max(len(target_tokens), 1)) if target_tokens else 0.0
+            
+            # Penalize heavily if NO distinctive tokens were matched (only generic words)
+            if overlap_count > 0 and len(distinctive_matches) == 0:
+                token_score *= 0.3  # Crush the token score
+
 
             # 3. String Levenshtein score
             lev_score = char_similarity(cleaned_query, sku_name)
 
             # Combined match score
-            base_score = max(alias_score, token_score * 0.8 + lev_score * 0.2)
+            # If there are unmatched distinctive tokens in the query, this is NOT an exact alias match.
+            query_distinctive = [t for t in tokens if t not in GENERIC_TOKENS]
+            unmatched_distinctive = [t for t in query_distinctive if t not in matched_tokens]
+            
+            if len(unmatched_distinctive) > 0:
+                base_score = token_score * 0.8 + lev_score * 0.2
+                base_score *= (0.7 ** len(unmatched_distinctive))
+            else:
+                base_score = max(alias_score, token_score * 0.8 + lev_score * 0.2)
 
             # Color verification boost/penalty
             color_bonus = 0.0
@@ -386,7 +422,22 @@ class OcrPipeline:
                 else:
                     color_bonus = -0.15
 
-            final_score = min(1.0, max(0.0, base_score + color_bonus))
+            # MRP Evidence
+            mrp_bonus = 0.0
+            if mrp and item.get("suggested_price"):
+                if abs(mrp - item["suggested_price"]) > 10.0:
+                    mrp_bonus = -0.60
+                elif base_score >= 0.35 and abs(mrp - item["suggested_price"]) < 0.1:
+                    mrp_bonus = 0.10
+
+            # Unit Evidence
+            unit_bonus = 0.0
+            if base_score >= 0.35 and unit and item.get("typical_units"):
+                unit_norm = unit.upper().replace(" ", "")
+                if any(u.upper().replace(" ", "") == unit_norm for u in item["typical_units"]):
+                    unit_bonus = 0.10
+
+            final_score = min(1.0, max(0.0, base_score + color_bonus + mrp_bonus + unit_bonus))
 
             candidates.append({
                 "item": item,
