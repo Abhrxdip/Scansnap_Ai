@@ -34,7 +34,7 @@ if ALLOWED_ORIGINS:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-else:
+elif os.getenv("ENVIRONMENT", "").lower() != "production":
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^https?://.*",
@@ -73,7 +73,7 @@ def health():
 
 @app.get("/view-data", tags=["Database Inspection"])
 def view_data(db: Session = Depends(get_db)):
-    if os.getenv("DEV_AUTH_BYPASS", "").lower() != "true":
+    if os.getenv("ENVIRONMENT", "").lower() == "production":
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Endpoint disabled in production")
     products_list = db.query(models.Product).all()

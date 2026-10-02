@@ -8,10 +8,23 @@ _SERVICE_ACCOUNT_PATH = os.path.join(os.path.dirname(__file__), "serviceAccountK
 
 # Initialize Firebase Admin SDK
 if not firebase_admin._apps:
-    if os.path.exists(_SERVICE_ACCOUNT_PATH):
+    import base64
+    import json
+    b64_creds = os.getenv("FIREBASE_CREDENTIALS_BASE64")
+    
+    if b64_creds:
+        try:
+            cred_json = json.loads(base64.b64decode(b64_creds).decode("utf-8"))
+            cred = credentials.Certificate(cred_json)
+            firebase_admin.initialize_app(cred)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load Firebase credentials from FIREBASE_CREDENTIALS_BASE64: {e}")
+    elif os.path.exists(_SERVICE_ACCOUNT_PATH):
         cred = credentials.Certificate(_SERVICE_ACCOUNT_PATH)
         firebase_admin.initialize_app(cred)
     else:
+        if os.getenv("ENVIRONMENT", "").lower() == "production":
+            raise RuntimeError("Missing FIREBASE_CREDENTIALS_BASE64 in production environment. Failing closed.")
         firebase_admin.initialize_app()
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -49,7 +62,10 @@ async def get_current_user_id(
                 pass
 
     # Local development & AdminPortal fallback (active unless strict PRODUCTION is configured)
-    if os.getenv("ENVIRONMENT", "").lower() != "production" or os.getenv("DEV_AUTH_BYPASS", "true").lower() in ("true", "1"):
+    is_prod = os.getenv("ENVIRONMENT", "").lower() == "production"
+    dev_bypass = os.getenv("DEV_AUTH_BYPASS", "false").lower() in ("true", "1")
+    
+    if not is_prod and dev_bypass:
         return "demo_user"
 
     raise HTTPException(

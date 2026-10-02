@@ -19,7 +19,6 @@ COPY . .
 
 # Environment settings
 ENV PORT=8000
-ENV DEV_AUTH_BYPASS=true
 
 EXPOSE 8000
 
