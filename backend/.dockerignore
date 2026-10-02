@@ -6,3 +6,8 @@ __pycache__/
 .pytest_cache/
 *.db-journal
 smartvendor.db.bak
+smartvendor.db
+smartvendor.db-wal
+smartvendor.db-shm
+serviceAccountKey.json
+.env
