@@ -7,6 +7,9 @@ import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.smartvendor.ai.model.Product
 import java.util.Locale
 
@@ -26,12 +29,27 @@ data class OcrResult(
     val fullCombinedName: String,
     val price: Double? = null,
     val matchScore: Float = 0.0f,
-    val detectedColor: PackagingColor = PackagingColor.UNKNOWN
+    val detectedColor: PackagingColor = PackagingColor.UNKNOWN,
+    val barcode: String? = null
 )
 
 class OcrScannerManager {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    
+    private val barcodeScanner = BarcodeScanning.getClient(
+        BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(
+                Barcode.FORMAT_EAN_13,
+                Barcode.FORMAT_EAN_8,
+                Barcode.FORMAT_UPC_A,
+                Barcode.FORMAT_UPC_E,
+                Barcode.FORMAT_CODE_128,
+                Barcode.FORMAT_CODE_39,
+                Barcode.FORMAT_ITF
+            )
+            .build()
+    )
 
     private val productColorSignatures = mapOf(
         "oreo" to PackagingColor.BLUE,
@@ -198,15 +216,20 @@ class OcrScannerManager {
         }
 
         val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        recognizer.process(image)
-            .addOnSuccessListener { visionText ->
-                imageProxy.close()
+        barcodeScanner.process(image).addOnCompleteListener { barcodeTask ->
+            val detectedBarcode = if (barcodeTask.isSuccessful) {
+                barcodeTask.result?.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue
+            } else null
+            
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    imageProxy.close()
 
-                val fullText = visionText.text
-                if (fullText.isBlank()) {
-                    onNotFound()
-                    return@addOnSuccessListener
-                }
+                    val fullText = visionText.text
+                    if (fullText.isBlank() && detectedBarcode == null) {
+                        onNotFound()
+                        return@addOnSuccessListener
+                    }
 
                 val allLines = visionText.textBlocks.flatMap { it.lines }
                 
@@ -295,25 +318,28 @@ class OcrScannerManager {
                 val topBox = validLines.firstOrNull()?.second
                 val sampledColor = detectDominantColor(mediaImage, topBox, imageProxy.imageInfo.rotationDegrees)
 
-                if (!detectedName.isNullOrBlank()) {
-                    val combinedName = if (!detectedUnit.isNullOrBlank() && !detectedName!!.contains(detectedUnit!!, ignoreCase = true)) {
-                        "$detectedName $detectedUnit"
+                if (!detectedName.isNullOrBlank() || detectedBarcode != null) {
+                    val finalName = detectedName ?: "Unknown Product"
+                    val combinedName = if (!detectedUnit.isNullOrBlank() && !finalName.contains(detectedUnit!!, ignoreCase = true)) {
+                        "$finalName $detectedUnit"
                     } else {
-                        detectedName!!
+                        finalName
                     }
 
                     onSuccess(
                         OcrResult(
-                            productName = detectedName!!,
+                            productName = finalName,
                             quantityUnit = detectedUnit,
                             fullCombinedName = combinedName,
                             price = detectedPrice,
-                            detectedColor = sampledColor
+                            detectedColor = sampledColor,
+                            barcode = detectedBarcode
                         )
                     )
                 } else {
                     onNotFound()
                 }
+            }
             }
             .addOnFailureListener { e ->
                 imageProxy.close()
@@ -332,38 +358,44 @@ class OcrScannerManager {
         onError: (Exception) -> Unit
     ) {
         val image = InputImage.fromBitmap(bitmap, 0)
-        recognizer.process(image)
-            .addOnSuccessListener { visionText ->
-                val ocrResult = parseOcrText(visionText)
-                if (ocrResult != null) {
-                    onSuccess(ocrResult)
-                } else {
-                    // ADAPTIVE PREPROCESSING SECOND PASS (Fallback for Glare/Low Contrast)
-                    try {
-                        val enhancedBitmap = preprocessBitmapForOCR(bitmap)
-                        val enhancedImage = InputImage.fromBitmap(enhancedBitmap, 0)
-                        
-                        recognizer.process(enhancedImage)
-                            .addOnSuccessListener { visionText2 ->
-                                val ocrResult2 = parseOcrText(visionText2)
-                                if (ocrResult2 != null) {
-                                    onSuccess(ocrResult2)
-                                } else {
+        barcodeScanner.process(image).addOnCompleteListener { barcodeTask ->
+            val detectedBarcode = if (barcodeTask.isSuccessful) {
+                barcodeTask.result?.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue
+            } else null
+
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    val ocrResult = parseOcrText(visionText, detectedBarcode)
+                    if (ocrResult != null) {
+                        onSuccess(ocrResult)
+                    } else {
+                        // ADAPTIVE PREPROCESSING SECOND PASS
+                        try {
+                            val enhancedBitmap = preprocessBitmapForOCR(bitmap)
+                            val enhancedImage = InputImage.fromBitmap(enhancedBitmap, 0)
+                            
+                            recognizer.process(enhancedImage)
+                                .addOnSuccessListener { visionText2 ->
+                                    val ocrResult2 = parseOcrText(visionText2, detectedBarcode)
+                                    if (ocrResult2 != null) {
+                                        onSuccess(ocrResult2)
+                                    } else {
+                                        onNotFound()
+                                    }
+                                }
+                                .addOnFailureListener {
                                     onNotFound()
                                 }
-                            }
-                            .addOnFailureListener {
-                                onNotFound()
-                            }
-                    } catch (e: Exception) {
-                        onNotFound()
+                        } catch (e: Exception) {
+                            onNotFound()
+                        }
                     }
                 }
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "OCR recognition error on bitmap", e)
-                onError(e)
-            }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "OCR recognition error on bitmap", e)
+                    onError(e)
+                }
+        }
     }
 
     private fun preprocessBitmapForOCR(original: android.graphics.Bitmap): android.graphics.Bitmap {
@@ -394,9 +426,9 @@ class OcrScannerManager {
         return result
     }
 
-    private fun parseOcrText(visionText: com.google.mlkit.vision.text.Text): OcrResult? {
+    private fun parseOcrText(visionText: com.google.mlkit.vision.text.Text, detectedBarcode: String? = null): OcrResult? {
         val fullText = visionText.text
-        if (fullText.isBlank()) {
+        if (fullText.isBlank() && detectedBarcode == null) {
             return null
         }
 
@@ -478,19 +510,21 @@ class OcrScannerManager {
             }
         }
 
-        if (!detectedName.isNullOrBlank()) {
-            val combinedName = if (!detectedUnit.isNullOrBlank() && !detectedName!!.contains(detectedUnit!!, ignoreCase = true)) {
-                "$detectedName $detectedUnit"
+        if (!detectedName.isNullOrBlank() || detectedBarcode != null) {
+            val finalName = detectedName ?: "Unknown Product"
+            val combinedName = if (!detectedUnit.isNullOrBlank() && !finalName.contains(detectedUnit!!, ignoreCase = true)) {
+                "$finalName $detectedUnit"
             } else {
-                detectedName!!
+                finalName
             }
 
             return OcrResult(
-                productName = detectedName!!,
+                productName = finalName,
                 quantityUnit = detectedUnit,
                 fullCombinedName = combinedName,
                 price = detectedPrice,
-                detectedColor = PackagingColor.UNKNOWN
+                detectedColor = PackagingColor.UNKNOWN,
+                barcode = detectedBarcode
             )
         }
         return null
@@ -638,6 +672,11 @@ class OcrScannerManager {
     ): List<Product> {
         if (inventoryProducts.isEmpty()) return emptyList()
 
+        if (!ocrResult.barcode.isNullOrBlank()) {
+            val barcodeMatch = inventoryProducts.find { it.barcode == ocrResult.barcode }
+            if (barcodeMatch != null) return listOf(barcodeMatch)
+        }
+
         val matches = mutableListOf<Pair<Product, Float>>()
 
         val scannedNameLower = ocrResult.fullCombinedName.lowercase(Locale.getDefault())
@@ -723,6 +762,11 @@ class OcrScannerManager {
     ): List<com.smartvendor.ai.network.models.MasterCatalogResponse> {
         if (catalogItems.isEmpty()) return emptyList()
 
+        if (!ocrResult.barcode.isNullOrBlank()) {
+            val barcodeMatch = catalogItems.find { it.barcode == ocrResult.barcode }
+            if (barcodeMatch != null) return listOf(barcodeMatch)
+        }
+
         val matches = mutableListOf<Pair<com.smartvendor.ai.network.models.MasterCatalogResponse, Float>>()
 
         val scannedNameLower = ocrResult.fullCombinedName.lowercase(Locale.getDefault())
@@ -796,6 +840,7 @@ class OcrScannerManager {
     fun close() {
         try {
             recognizer.close()
+            barcodeScanner.close()
         } catch (e: Exception) {
             Log.e(TAG, "Error closing OCR recognizer", e)
         }
