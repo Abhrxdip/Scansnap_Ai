@@ -343,14 +343,32 @@ class OcrPipeline:
             return unit_str
         return None
 
-    def match_product(self, raw_text: str, detected_color: Optional[str] = None) -> Dict[str, Any]:
+    def match_product(self, raw_text: str, detected_color: Optional[str] = None, detected_barcode: Optional[str] = None) -> Dict[str, Any]:
         """
         Executes full OCR pipeline:
-        1. Parse MRP Price
-        2. Parse Quantity Unit
-        3. Clean tokens & resolve aliases
-        4. Multi-level fuzzy matching against Master Catalog
+        1. Barcode fast-path
+        2. Parse MRP Price
+        3. Parse Quantity Unit
+        4. Clean tokens & resolve aliases
+        5. Multi-level fuzzy matching against Master Catalog
         """
+        if detected_barcode:
+            for item in self.catalog:
+                if item.get("barcode") == detected_barcode:
+                    # Fast-path return for exact barcode match
+                    # Wait, we might still want to extract MRP if present in OCR text?
+                    mrp = self.extract_mrp(raw_text)
+                    unit = self.extract_unit(raw_text) or item.get("typical_units", [None])[0]
+                    return {
+                        "status": "MATCHED",
+                        "product_id": item["id"],
+                        "product_name": item["name"],
+                        "match_score": 1.0,
+                        "match_type": "BARCODE",
+                        "extracted_price": mrp,
+                        "extracted_unit": unit
+                    }
+
         mrp = self.extract_mrp(raw_text)
         unit = self.extract_unit(raw_text)
         tokens, cleaned_query = self.clean_text_tokens(raw_text)

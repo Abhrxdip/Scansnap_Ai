@@ -40,9 +40,10 @@ def run_tests_and_stress():
         raw = t["raw_ocr"]
         exp_id = t["expected_id"]
         exp_price = t["expected_price"]
+        det_barcode = t.get("detected_barcode")
         
         start_time = time.perf_counter()
-        res = pipeline.match_product(raw)
+        res = pipeline.match_product(raw, detected_barcode=det_barcode)
         lat = (time.perf_counter() - start_time) * 1000
         latencies.append(lat)
         
@@ -73,7 +74,7 @@ def run_tests_and_stress():
         base = random.choice(tests)
         # Randomize spaces, case, insert random characters to simulate noisy OCR
         chars = list(base["raw_ocr"])
-        if random.random() > 0.5:
+        if random.random() > 0.5 and chars:
             # insert noise
             idx = random.randint(0, len(chars)-1)
             chars.insert(idx, random.choice(['#', '@', ' ', '1', '0', '~']))
