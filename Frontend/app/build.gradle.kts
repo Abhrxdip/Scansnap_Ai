@@ -30,11 +30,11 @@ android {
 
     buildTypes {
         getByName("debug") {
-            buildConfigField("String", "API_BASE_URL", "\"http://192.168.0.101:8000/\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://scansnapai-production.up.railway.app/\"")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
-            buildConfigField("String", "API_BASE_URL", "\"https://api.smartvendor.example.com/\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://scansnapai-production.up.railway.app/\"")
             manifestPlaceholders["usesCleartextTraffic"] = "false"
             isMinifyEnabled = false
             proguardFiles(

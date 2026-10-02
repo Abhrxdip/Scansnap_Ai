@@ -1,18 +1,18 @@
 // ScanSnap AI — Unified API Client
 // Automatically tries /api proxy first, with transparent fallback to http://127.0.0.1:8000
-const DIRECT_BACKEND = 'http://127.0.0.1:8000';
+const DIRECT_BACKEND = 'https://scansnapai-production.up.railway.app';
 
 export async function apiFetch(endpoint, options = {}) {
-  // Try /api first
   try {
-    const res = await fetch(`/api${endpoint}`, options);
-    if (res.status === 404 || res.status === 502 || res.status === 504) {
-      throw new Error(`Proxy error ${res.status}`);
-    }
+    const res = await fetch(`${DIRECT_BACKEND}${endpoint}`, options);
     return res;
   } catch (err) {
-    // Transparent direct fallback to backend
-    return fetch(`${DIRECT_BACKEND}${endpoint}`, options);
+    // Transparent local fallback
+    try {
+      return await fetch(`/api${endpoint}`, options);
+    } catch {
+      return fetch(`http://127.0.0.1:8000${endpoint}`, options);
+    }
   }
 }
 
