@@ -32,6 +32,11 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import android.graphics.Bitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -308,6 +313,7 @@ fun ScanScreen(
                             uiState.detectedProduct?.let { product ->
                                 DetectedProductCard(
                                     product = product,
+                                    detectedBitmap = uiState.detectedBitmap,
                                     selectedQuantity = uiState.selectedQuantity,
                                     onIncrease = { viewModel.increaseQuantity() },
                                     onDecrease = { viewModel.decreaseQuantity() },
@@ -594,6 +600,7 @@ fun AiStatusBanner(
 @Composable
 fun DetectedProductCard(
     product: Product,
+    detectedBitmap: Bitmap? = null,
     selectedQuantity: Int,
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
@@ -611,15 +618,30 @@ fun DetectedProductCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (detectedBitmap != null) {
+                    Image(
+                        bitmap = detectedBitmap.asImageBitmap(),
+                        contentDescription = product.name,
+                        modifier = Modifier
+                            .size(62.dp)
+                            .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = product.name,
                         fontWeight = FontWeight.Black,
-                        fontSize = 18.sp,
-                        color = NeuBlack
+                        fontSize = 17.sp,
+                        color = NeuBlack,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Category: ${product.category}",
@@ -631,7 +653,7 @@ fun DetectedProductCard(
                 Text(
                     text = "₹${"%.2f".format(product.price)}",
                     fontWeight = FontWeight.Black,
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     color = NeuBlue
                 )
             }
@@ -710,11 +732,11 @@ fun DetectedProductCard(
                     cornerRadius = 10.dp
                 )
                 NeuButton(
-                    text = "Add to Bill",
+                    text = "➕ Add to Bill",
                     onClick = onAdd,
                     backgroundColor = NeuYellow,
                     textColor = NeuBlack,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.3f),
                     shadowOffset = 3.dp,
                     cornerRadius = 10.dp
                 )
