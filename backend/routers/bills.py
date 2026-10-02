@@ -127,11 +127,9 @@ def create_bill(
 
     # Atomically reduce stock for all sold products
     for product_id, total_requested in sorted(requested_quantities.items()):
-        db.query(models.Product).filter(
-            models.Product.id == product_id
-        ).update({
-            models.Product.stock: func.greatest(0, models.Product.stock - total_requested)
-        }, synchronize_session=False)
+        product = products_by_id.get(product_id)
+        if product:
+            product.stock = max(0, product.stock - total_requested)
 
     try:
         db.commit()
