@@ -74,6 +74,7 @@ class ScanViewModel(
             detectionStabilityMap.clear()
             latchedProductIds.clear()
             _uiState.update { it.copy(aiStatus = "🔍 YOLO Object Detection Active") }
+            yoloDetector.initialize(context)
             loadBill(billId)
             observeInventory()
         }

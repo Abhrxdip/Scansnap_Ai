@@ -70,7 +70,18 @@ def seed_sample_products_for_user(db: Session, user_id: str) -> List[models.Prod
         ("Lays Chips", "Snacks", 20.0, 100, "8901262010141"),
         ("Kurkure", "Snacks", 20.0, 110, "8901262010142"),
         ("Haldiram Bhujia", "Snacks", 55.0, 50, "8901262010143"),
-        ("Everest Turmeric", "Spices", 32.0, 60, "8901262010151")
+        ("Everest Turmeric", "Spices", 32.0, 60, "8901262010151"),
+        ("Amul Ice Cream Cup Vanilla Magic", "Dairy", 60.0, 50, "8901262010201"),
+        ("Britannia Treat Chocolate Cake", "Snacks", 40.0, 60, "8901262010202"),
+        ("CeraVe Daily Moisturizing Lotion", "Skincare", 350.0, 30, "8901262010203"),
+        ("Head & Shoulders Cool Menthol Shampoo", "Hygiene", 180.0, 45, "8901262010204"),
+        ("Nestle Everyday Dairy Whitener", "Dairy", 220.0, 40, "8901262010205"),
+        ("Plum Green Tea Face Wash", "Skincare", 290.0, 35, "8901262010206"),
+        ("Thums Up Charged Carbonated Drink", "Beverages", 40.0, 70, "8901262010207"),
+        ("Wild Stone Code Platinum Deodorant", "Personal Care", 199.0, 55, "8901262010208"),
+        ("Nivea Men Fresh Active Deodorant", "Personal Care", 210.0, 50, "8901262010209"),
+        ("Britannia Bourbon Chocolate Biscuits", "Snacks", 30.0, 70, "8901262010210"),
+        ("Britannia Milk Bikis Biscuits", "Snacks", 25.0, 80, "8901262010211")
     ]
     created = []
     for name, cat, price, stock, barcode in sample_data:

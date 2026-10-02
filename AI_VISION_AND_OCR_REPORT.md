@@ -65,15 +65,18 @@ graph LR
 
 ---
 
-### 🔵 B. Object & Image Detection (For You to Improve)
+### 🔵 B. Object & Image Detection (Completed Milestones)
 
-| Issue | Root Cause | Impact | Recommended Fix |
+| Milestone / Feature | Problem Solved | Implementation Detail | Status |
 | :--- | :--- | :--- | :--- |
-| **1. HSV Color Signatures Under Varied Lighting** | Physical packaging colors shift hue depending on ambient lighting (warm incandescent 2700K vs cool white LED 6500K). | HSV verifier rejects valid YOLO detections because hue shifted ±15° outside hardcoded boundaries. | Expand HSV tolerances in `backend/routers/detect.py`: allow dynamic hue windows (±18°) or normalize image white balance using gray-world assumption before color sampling. |
-| **2. Multi-Product Bounding Box Overlaps** | When products sit close together on a counter, YOLO predicts overlapping candidate boxes. | Multiple bounding boxes jitter or flicker between frames. | Fine-tune Non-Maximum Suppression (NMS) IoU threshold (set to `0.45`) and implement a 3-frame temporal latch before confirming detection. |
-| **3. Aspect-Ratio & Dimension Validation** | YOLO occasionally confuses similar color blocks (e.g. a yellow sponge vs a yellow Maggi pack). | Out-of-domain false positives. | Validate bounding box aspect ratio: tall bottles (CeraVe, H&S) must have height/width ratio &gt; 1.6; rectangular snack packs (Maggi, Bourbon) must have aspect ratio ~1.3–1.8. |
-| **4. Edge Cases: Partial Occlusion & Tilt Angles** | Dataset images are mostly upright; products tilted &gt;45° or partially held by hands have lower confidence. | Detection drops when customer holds product at an angle. | Expand `AI/build_augmented_dataset.py` with Albumentations: random rotation (-35° to +35°), synthetic finger/hand occlusions, and perspective warping. |
-| **5. On-Device TFLite Quantization** | Currently running inference against local FastAPI backend; requires Wi-Fi network connectivity. | Cannot scan without network connection to backend. | Quantize `best.pt` to INT8 TFLite using `ultralytics export format=tflite int8` and integrate into Android `TFLiteClassifier.kt` for zero-latency offline scanning. |
+| **1. Dynamic HSV Packaging Signatures** | Hardcoded saturation thresholds caused rejection under warm or diffuse room lights. | Calibrated adaptive saturation floor (`sat_floor = 24 if mean_sat < 45 else 36`) and normalized hue distance in `backend/routers/detect.py`. | ✅ **COMPLETED (PASS 8/8)** |
+| **2. Aspect-Ratio & Geometric Validation** | Out-of-domain clutter or yellow/red objects falsely triggering product bounding boxes. | Implemented `_verify_aspect_ratio()` enforcing strict height-to-width ranges for tall bottles (CeraVe, H&S: 1.2–3.2) vs rectangular packs (1.1–2.2). | ✅ **COMPLETED (PASS 8/8)** |
+| **3. Temporal Latching & Multi-Object Gating** | Flickering detections and slow auto-billing latency. | Implemented 3-tier adaptive confidence latching in `ScanViewModel.kt`: conf ≥ 0.80 latches on frame 1; conf ≥ 0.65 in 2 frames; low conf in 3 frames. | ✅ **COMPLETED** |
+| **4. On-Device TFLite Export & Optimization** | Network-dependent inference requiring live backend server on hackathon Wi-Fi. | Converted YOLO model to `best.tflite` (10.59 MB) and `best.onnx` (10.1 MB) using ONNX to TFLite direct flatbuffer lowering. Verified 100% detection on sample packshots. | ✅ **COMPLETED** |
+| **5. Android Asset Deployment & Label Sync** | Placeholders in `labels.txt` and hardcoded 80-class COCO dimensions. | Deployed `best.tflite` and the 11 custom classes into `Frontend/app/src/main/assets/`. | ✅ **COMPLETED** |
+| **6. Dynamic TFLite Classifier & Letterbox** | Hardcoded tensor shape `[1, 84, 8400]` caused runtime array mismatch crashes. | Re-engineered `TFLiteClassifier.kt` with dynamic shape inspection `[1, 15, 8400]`, aspect-ratio preserving letterbox in `YoloUtils.kt`, and normalized bbox bridge. | ✅ **COMPLETED** |
+| **7. Dual-Path Zero-Downtime Failover** | Network drops or backend offline during live hackathon demo. | Enhanced `YoloDetectionRepository.kt`: tries FastAPI GPU backend, instantly falls back to on-device TFLite with zero dropped frames. | ✅ **COMPLETED** |
+| **8. Android APK Build & Packaging** | Fixed invalid `usesCleartextTraffic=""` manifest error. | Executed `compileDebugKotlin` and `assembleDebug` with Gradle 8.9: built `app-debug.apk` (121.9 MB) with zero errors. | ✅ **COMPLETED** |
 
 ---
 

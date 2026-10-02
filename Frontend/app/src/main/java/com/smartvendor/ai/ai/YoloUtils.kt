@@ -2,6 +2,8 @@ package com.smartvendor.ai.ai
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.graphics.RectF
@@ -13,8 +15,17 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 object YoloUtils {
+
+    data class LetterboxInfo(
+        val scale: Float,
+        val padX: Float,
+        val padY: Float,
+        val origWidth: Int,
+        val origHeight: Int
+    )
 
     fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
         val plane = image.planes[0]
@@ -48,6 +59,44 @@ object YoloUtils {
         val matrix = Matrix()
         matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    /**
+     * Letterbox preprocessing maintaining aspect ratio with neutral 114 gray background padding.
+     */
+    fun preprocessBitmapLetterbox(bitmap: Bitmap, inputSize: Int = 640): Pair<ByteBuffer, LetterboxInfo> {
+        val origW = bitmap.width
+        val origH = bitmap.height
+        val scale = min(inputSize.toFloat() / origW.toFloat(), inputSize.toFloat() / origH.toFloat())
+        val newW = (origW * scale).roundToInt()
+        val newH = (origH * scale).roundToInt()
+        val padX = (inputSize - newW) / 2f
+        val padY = (inputSize - newH) / 2f
+
+        val canvasBitmap = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(canvasBitmap)
+        canvas.drawColor(Color.rgb(114, 114, 114))
+
+        val scaled = Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+        canvas.drawBitmap(scaled, padX, padY, null)
+
+        val byteBuffer = ByteBuffer.allocateDirect(4 * inputSize * inputSize * 3)
+        byteBuffer.order(ByteOrder.nativeOrder())
+
+        val intValues = IntArray(inputSize * inputSize)
+        canvasBitmap.getPixels(intValues, 0, inputSize, 0, 0, inputSize, inputSize)
+
+        var pixel = 0
+        for (i in 0 until inputSize) {
+            for (j in 0 until inputSize) {
+                val valPixel = intValues[pixel++]
+                byteBuffer.putFloat(((valPixel shr 16 and 0xFF) / 255.0f))
+                byteBuffer.putFloat(((valPixel shr 8 and 0xFF) / 255.0f))
+                byteBuffer.putFloat(((valPixel and 0xFF) / 255.0f))
+            }
+        }
+
+        return Pair(byteBuffer, LetterboxInfo(scale, padX, padY, origW, origH))
     }
 
     fun preprocessBitmap(bitmap: Bitmap, inputSize: Int): Pair<ByteBuffer, FloatArray> {

@@ -1,5 +1,6 @@
 package com.smartvendor.ai.ai
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Base64
@@ -14,13 +15,27 @@ import java.io.ByteArrayOutputStream
 
 /**
  * Fast Multi-Object YOLO Detection Repository
- * Sends lightweight, downscaled camera frames to the backend YOLO endpoint
- * and returns all detected products in real time.
+ * Supports both on-device TFLite inference and backend FastAPI inference with seamless failover.
  */
-class YoloDetectionRepository {
+class YoloDetectionRepository(context: Context? = null) {
 
     private val api = ApiClient.apiService
     private val TAG = "YoloDetection"
+
+    private var tfliteClassifier: TFLiteClassifier? = null
+
+    init {
+        context?.let { ctx ->
+            tfliteClassifier = TFLiteClassifier(ctx)
+        }
+    }
+
+    suspend fun initialize(context: Context) = withContext(Dispatchers.IO) {
+        if (tfliteClassifier == null) {
+            tfliteClassifier = TFLiteClassifier(context)
+        }
+        tfliteClassifier?.initialize()
+    }
 
     /**
      * Convert CameraX ImageProxy to lightweight base64 JPEG and detect all products.
@@ -30,30 +45,10 @@ class YoloDetectionRepository {
         imageProxy: ImageProxy,
         confThreshold: Float = 0.30f
     ): YoloDetectResponse? = withContext(Dispatchers.IO) {
+        val bitmap = imageProxyToRotatedBitmap(imageProxy)
         try {
-            val bitmap = imageProxyToRotatedBitmap(imageProxy) ?: return@withContext null
-            // Downscale to 480px for ultra-low latency (<50ms network payload)
-            val scaled = scaleBitmap(bitmap, maxDim = 480)
-            val base64Jpeg = bitmapToBase64Jpeg(scaled)
-
-            val response = api.detectFromBase64(
-                YoloDetectRequest(image = base64Jpeg, conf = confThreshold)
-            )
-            if (response.isSuccessful) {
-                val body = response.body()
-                if (body != null && body.detections.isNotEmpty()) {
-                    Log.d(TAG, "YOLO found ${body.detections.size} products: ${body.detections.map { it.label }}")
-                    body
-                } else {
-                    null
-                }
-            } else {
-                Log.w(TAG, "Detection API error: ${response.code()} ${response.message()}")
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception during YOLO detection", e)
-            null
+            if (bitmap == null) return@withContext null
+            detectFromBitmap(bitmap, confThreshold)
         } finally {
             try {
                 imageProxy.close()
@@ -63,23 +58,46 @@ class YoloDetectionRepository {
     }
 
     /**
-     * Convert a [Bitmap] to base64 JPEG and call backend.
+     * Convert a [Bitmap] to base64 JPEG and call backend; falls back seamlessly to on-device TFLite.
      */
     suspend fun detectFromBitmap(
         bitmap: Bitmap,
         confThreshold: Float = 0.30f
     ): YoloDetectResponse? = withContext(Dispatchers.IO) {
+        // 1. Try Backend YOLO endpoint
         try {
             val scaled = scaleBitmap(bitmap, maxDim = 480)
             val base64Jpeg = bitmapToBase64Jpeg(scaled)
             val response = api.detectFromBase64(
                 YoloDetectRequest(image = base64Jpeg, conf = confThreshold)
             )
-            if (response.isSuccessful) response.body() else null
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null && body.detections.isNotEmpty()) {
+                    Log.d(TAG, "Backend YOLO found ${body.detections.size} products: ${body.detections.map { it.label }}")
+                    return@withContext body
+                }
+            } else {
+                Log.w(TAG, "Detection API error: ${response.code()} ${response.message()}")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception during YOLO bitmap detection", e)
-            null
+            Log.d(TAG, "Backend YOLO unreachable or slow (${e.message}), using On-Device TFLite")
         }
+
+        // 2. On-Device TFLite Fallback / Acceleration
+        if (tfliteClassifier?.isReady() == true) {
+            try {
+                val tfliteResponse = tfliteClassifier?.detectYolo(bitmap, confThreshold)
+                if (tfliteResponse != null && tfliteResponse.detections.isNotEmpty()) {
+                    Log.d(TAG, "⚡ On-Device TFLite found ${tfliteResponse.detections.size} products: ${tfliteResponse.detections.map { it.label }}")
+                    return@withContext tfliteResponse
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "On-Device TFLite inference error: ${e.message}")
+            }
+        }
+
+        null
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

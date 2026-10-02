@@ -1,6 +1,11 @@
-Product_0
-Product_1
-Product_2
-Product_3
-Product_4
-Product_5
+amul_ice_cream
+cake
+cerave
+hns_shampoo
+nestle_milk_powder
+plum
+thums_up
+wild_stone
+nivea_deodorant
+bourbon_biscuit
+milky_biscuit
