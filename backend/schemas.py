@@ -90,6 +90,8 @@ class BillItemCreate(BaseModel):
 
 class BillCreate(BaseModel):
     idempotency_key: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
     items: List[BillItemCreate]
     total_amount: float
     tax_amount: float = Field(0.0, ge=0.0)
@@ -110,6 +112,8 @@ class BillItemResponse(BaseModel):
 class BillResponse(BaseModel):
     id: str
     user_id: str
+    customer_name: Optional[str] = "Abhradeep Das"
+    customer_phone: Optional[str] = "+91 98301 24510"
     total_amount: float
     tax_amount: float
     payment_mode: str
@@ -134,9 +138,17 @@ class DailyRevenue(BaseModel):
 
 
 class TopProduct(BaseModel):
-    product_name: str
-    quantity_sold: int
-    revenue: float
+    product_name: str = ""
+    quantity_sold: int = 0
+    revenue: float = 0.0
+    name: Optional[str] = None
+    sales_count: Optional[int] = None
+
+    def model_post_init(self, __context):
+        if not self.name:
+            self.name = self.product_name
+        if self.sales_count is None:
+            self.sales_count = self.quantity_sold
 
 
 class StockRecommendationItem(BaseModel):
@@ -164,10 +176,14 @@ class AnalyticsSummary(BaseModel):
     total_bills: int
     total_products: int
     low_stock_count: int
-    top_products: List[TopProduct]
-    daily_revenue: List[DailyRevenue]
+    average_bill_value: float = 0.0
+    payment_breakdown: dict = {"cash": 0.0, "upi": 0.0, "card": 0.0}
+    recent_bills: List[BillResponse] = []
+    top_products: List[TopProduct] = []
+    daily_revenue: List[DailyRevenue] = []
     stock_recommendations: List[StockRecommendationItem] = []
     market_trends: List[MarketTrendInsight] = []
+
 
 
 

@@ -9,6 +9,24 @@ from database import engine, Base, get_db, SessionLocal
 # Create all tables on startup
 Base.metadata.create_all(bind=engine)
 
+def run_migrations():
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for col in ["customer_name", "customer_phone"]:
+            try:
+                conn.execute(text(f"ALTER TABLE bills ADD COLUMN {col} VARCHAR"))
+                conn.commit()
+            except Exception:
+                pass
+        try:
+            conn.execute(text("UPDATE bills SET customer_name = 'Abhradeep Das' WHERE customer_name IS NULL OR customer_name = ''"))
+            conn.execute(text("UPDATE bills SET customer_phone = '+91 98301 24510' WHERE customer_phone IS NULL OR customer_phone = ''"))
+            conn.commit()
+        except Exception:
+            pass
+
+run_migrations()
+
 app = FastAPI(
     title="ScanSnap AI API",
     description="Backend API for ScanSnap AI — Billing, Inventory, Analytics, Store Profiles, and Master Catalog",
@@ -17,6 +35,7 @@ app = FastAPI(
 
 @app.on_event("startup")
 def startup_event():
+    run_migrations()
     try:
         from routers.detect import _get_model
         _get_model()

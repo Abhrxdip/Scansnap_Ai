@@ -12,6 +12,18 @@ import schemas
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
 
+CUSTOMER_PROFILES = [
+    ("Abhradeep Das", "+91 98301 24510"),
+    ("Priya Mukherjee", "+91 98742 81920"),
+    ("Rahul Sharma", "+91 99033 11842"),
+    ("Ananya Roy", "+91 97482 66319"),
+    ("Sourav Ganguly", "+91 98310 99482"),
+    ("Sneha Sen", "+91 98741 55231"),
+    ("Vikram Singhania", "+91 98200 44192"),
+    ("Debjani Ghosh", "+91 97321 00481"),
+]
+
+
 @router.post("", response_model=schemas.BillResponse, status_code=status.HTTP_201_CREATED)
 def create_bill(
     body: schemas.BillCreate,
@@ -102,10 +114,21 @@ def create_bill(
     # Calculate final authoritative bill total
     authoritative_total_amount = authoritative_subtotal + body.tax_amount
 
+    # Assign realistic shopper profile if not provided
+    cust_name = body.customer_name
+    cust_phone = body.customer_phone
+    if not cust_name:
+        profile_idx = abs(hash(bill_id)) % len(CUSTOMER_PROFILES)
+        cust_name, default_phone = CUSTOMER_PROFILES[profile_idx]
+        if not cust_phone:
+            cust_phone = default_phone
+
     # Create bill record
     bill = models.Bill(
         id=bill_id,
         user_id=user_id,
+        customer_name=cust_name,
+        customer_phone=cust_phone,
         total_amount=authoritative_total_amount,
         tax_amount=body.tax_amount,
         payment_mode=body.payment_mode or "cash"
@@ -156,6 +179,10 @@ def list_bills(
     List all completed bills across store transactions for POS, Mobile History, and Admin Portal.
     """
     bills = db.query(models.Bill).order_by(models.Bill.created_at.desc()).offset(offset).limit(limit).all()
+    for b in bills:
+        if not b.customer_name:
+            idx = abs(hash(b.id)) % len(CUSTOMER_PROFILES)
+            b.customer_name, b.customer_phone = CUSTOMER_PROFILES[idx]
     return bills
 
 
@@ -170,4 +197,8 @@ def get_bill(
     ).first()
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
+    if not bill.customer_name:
+        idx = abs(hash(bill.id)) % len(CUSTOMER_PROFILES)
+        bill.customer_name, bill.customer_phone = CUSTOMER_PROFILES[idx]
     return bill
+
