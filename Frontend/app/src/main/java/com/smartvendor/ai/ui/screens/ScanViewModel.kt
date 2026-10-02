@@ -493,7 +493,18 @@ class ScanViewModel(
                         if (!isLatched && now - lastAdded >= addedCooldownMs && !isDismissed) {
                             val count = detectionStabilityMap.getOrDefault(matched.id, 0) + 1
                             detectionStabilityMap[matched.id] = count
-                            if (count >= 3) {
+
+                            // Adaptive Confidence-Based Latching Speed:
+                            // High confidence (>=0.80) adds immediately in 1 frame!
+                            // Mid confidence (>=0.65) requires 2 frames.
+                            // Lower confidence (<0.65) requires 3 frames to reject noise.
+                            val requiredFrames = when {
+                                det.confidence >= 0.80f -> 1
+                                det.confidence >= 0.65f -> 2
+                                else -> 3
+                            }
+
+                            if (count >= requiredFrames) {
                                 matchedList.add(matched)
                                 detectionStabilityMap.remove(matched.id)
                                 latchedProductIds.add(matched.id)

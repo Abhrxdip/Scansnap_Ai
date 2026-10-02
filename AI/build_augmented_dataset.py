@@ -263,9 +263,45 @@ def augment_sample(img_bgr: np.ndarray, bbox: tuple[float, float, float, float])
     rot_right, bbox_r = rotate_image_and_bbox(img_bgr, bbox, 12.0)
     variants.append((rot_right, bbox_r))
 
-    # 10. Zoom out with padding (scale 0.82x)
+    # 10. Stronger angle tilt (-22 deg)
+    rot_left_strong, bbox_ls = rotate_image_and_bbox(img_bgr, bbox, -22.0)
+    variants.append((rot_left_strong, bbox_ls))
+
+    # 11. Zoom out with padding (scale 0.82x)
     scaled, bbox_s = scale_image_and_bbox(img_bgr, bbox, 0.82)
     variants.append((scaled, bbox_s))
+
+    # 12. Specular Packaging Glare (simulates white LED hotspot / camera flash on glossy plastic)
+    try:
+        glare_img = img_bgr.copy()
+        gh, gw = glare_img.shape[:2]
+        spot_x = int(np.clip((xc + random.uniform(-0.12, 0.12)) * gw, 10, gw - 10))
+        spot_y = int(np.clip((yc + random.uniform(-0.12, 0.12)) * gh, 10, gh - 10))
+        spot_r = max(15, min(gw, gh) // 7)
+        overlay = glare_img.copy()
+        cv2.circle(overlay, (spot_x, spot_y), spot_r, (255, 255, 255), -1)
+        glare_blended = cv2.addWeighted(overlay, 0.40, glare_img, 0.60, 0)
+        variants.append((glare_blended, bbox))
+    except Exception:
+        pass
+
+    # 13. Partial Hand / Finger Occlusion Cutout (simulates fingers holding packaging at checkout)
+    try:
+        occ_img = img_bgr.copy()
+        oh, ow = occ_img.shape[:2]
+        bw_px = max(20, int(bw * ow))
+        bh_px = max(20, int(bh * oh))
+        bx1 = int((xc - bw / 2.0) * ow)
+        by1 = int((yc - bh / 2.0) * oh)
+        occ_w = int(bw_px * random.uniform(0.14, 0.24))
+        occ_h = int(bh_px * random.uniform(0.14, 0.24))
+        occ_x = int(np.clip(bx1 + bw_px * random.uniform(0.1, 0.65), 0, ow - occ_w))
+        occ_y = int(np.clip(by1 + bh_px * random.uniform(0.35, 0.75), 0, oh - occ_h))
+        skin_tone = (145, 175, 215) # BGR skin approximation
+        cv2.rectangle(occ_img, (occ_x, occ_y), (occ_x + occ_w, occ_y + occ_h), skin_tone, -1)
+        variants.append((occ_img, bbox))
+    except Exception:
+        pass
 
     return variants
 

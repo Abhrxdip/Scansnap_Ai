@@ -192,101 +192,145 @@ def _match_db_product(label: str, user_id: str) -> Optional[dict]:
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
-def _verify_color_signature(crop_img: Image.Image, label: str) -> Optional[bool]:
+def _verify_aspect_ratio(box: list[float], label: str) -> Optional[bool]:
     """
-    Sub-millisecond (<0.5ms) physical packaging color profile validator.
+    Validates physical packaging aspect ratio (height / width).
+    Filters out impossible geometric distortions (e.g. flat horizontal CeraVe bottles,
+    or tall needle-thin biscuit packets).
+    Returns True if valid, False if physically implausible, None if agnostic.
+    """
+    try:
+        x1, y1, x2, y2 = box
+        bw = max(1.0, float(x2 - x1))
+        bh = max(1.0, float(y2 - y1))
+        ratio = bh / bw  # height / width
+
+        lbl = label.lower().strip()
+
+        # Tall cylinders & bottles (must be vertically oriented)
+        if lbl in ("cerave", "hns_shampoo", "nivea_deodorant"):
+            if ratio < 0.75:  # Flat horizontal shape cannot physically be these bottles
+                return False
+        elif lbl == "thums_up":
+            if ratio < 0.70:  # Beverage can cannot be extremely flat
+                return False
+
+        # Horizontal packs & biscuits (cannot be extremely tall skinny vertical slivers)
+        elif lbl in ("bourbon", "bourbon_biscuit", "milky_biscuit", "hide_and_seek", "jim_jam", "oreo"):
+            if ratio > 2.8:  # Extremely tall narrow sliver
+                return False
+
+        return True
+    except Exception:
+        return None
+
+
+def _verify_color_signature(crop_img: Image.Image, label: str, conf: float = 0.5) -> Optional[bool]:
+    """
+    Sub-millisecond (<0.5ms) physical packaging color profile validator with
+    adaptive lighting calibration and confidence awareness.
     Eliminates out-of-domain false positives using HSV color distributions.
     Returns True if verified, False if verification fails, and None if verification is unavailable.
     """
     try:
+        # High confidence YOLO detections (>0.75) are generally trusted
+        # unless an extreme color inversion occurs
+        is_high_conf = conf >= 0.75
+
         small = crop_img.resize((64, 64)).convert("HSV")
         hsv_np = np.array(small)
         h = hsv_np[:, :, 0]
         s = hsv_np[:, :, 1]
         v = hsv_np[:, :, 2]
 
-        saturated = (s > 40) & (v > 50)
-        if not np.any(saturated):
+        # Adaptive saturation threshold: lowers saturation floor in dim/washed-out rooms
+        mean_sat = float(np.mean(s))
+        sat_floor = 24 if mean_sat < 45 else 36
+        val_floor = 35
+
+        saturated = (s > sat_floor) & (v > val_floor)
+        total_sat = np.sum(saturated)
+        
+        # If less than 6% of pixels are saturated (mostly neutral white/gray/black/glare),
+        # color verification is inconclusive. Return None (do not reject).
+        if total_sat < (64 * 64 * 0.06):
             return None
 
         h_deg = (h[saturated] / 255.0) * 360.0
-        total = len(h_deg)
+        total = float(len(h_deg))
         if total == 0:
             return None
 
-        yellow_pct = (np.sum((h_deg >= 35) & (h_deg <= 75)) / total) * 100
-        green_pct = (np.sum((h_deg >= 80) & (h_deg <= 165)) / total) * 100
-        blue_pct = (np.sum((h_deg >= 170) & (h_deg <= 260)) / total) * 100
-        red_pct = (np.sum((h_deg <= 25) | (h_deg >= 335)) / total) * 100
-        purple_pct = (np.sum((h_deg > 260) & (h_deg < 335)) / total) * 100
+        yellow_pct = (np.sum((h_deg >= 32) & (h_deg <= 78)) / total) * 100
+        green_pct = (np.sum((h_deg >= 78) & (h_deg <= 165)) / total) * 100
+        blue_pct = (np.sum((h_deg >= 165) & (h_deg <= 260)) / total) * 100
+        red_pct = (np.sum((h_deg <= 28) | (h_deg >= 332)) / total) * 100
+        purple_pct = (np.sum((h_deg > 260) & (h_deg < 332)) / total) * 100
 
         lbl = label.lower().strip()
 
         # Existing Kirana items
         if lbl == "maggi":
-            if yellow_pct < 20.0 or green_pct > 25.0:
+            if not is_high_conf and (yellow_pct < 15.0 or green_pct > 35.0):
                 return False
         elif lbl in ("surf_excel", "surf"):
-            if blue_pct < 12.0 or yellow_pct > 30.0:
+            if not is_high_conf and (blue_pct < 8.0 or yellow_pct > 35.0):
                 return False
         elif lbl in ("bourbon", "bourbon_biscuit"):
-            if blue_pct > 20.0 or green_pct > 20.0 or yellow_pct > 35.0:
+            if not is_high_conf and (blue_pct > 30.0 or green_pct > 30.0 or yellow_pct > 40.0):
                 return False
         elif lbl == "oreo":
-            if green_pct > 25.0 or yellow_pct > 30.0:
+            if not is_high_conf and (green_pct > 35.0 or yellow_pct > 35.0):
                 return False
         elif lbl in ("appe_fizz", "appy_fizz", "appe", "appy"):
-            if green_pct > 25.0 or blue_pct > 25.0:
+            if not is_high_conf and (green_pct > 35.0 or blue_pct > 35.0):
                 return False
         elif lbl in ("hide_and_seek", "hide_seek"):
-            if green_pct > 25.0 or yellow_pct > 30.0:
+            if not is_high_conf and (green_pct > 35.0 or yellow_pct > 35.0):
                 return False
         elif lbl in ("jim_jam", "jimjam"):
-            if green_pct > 25.0 or blue_pct > 25.0:
+            if not is_high_conf and (green_pct > 35.0 or blue_pct > 35.0):
                 return False
         elif lbl in ("nivea_deodorant", "nivea"):
-            if green_pct > 25.0 or yellow_pct > 30.0:
+            if not is_high_conf and (green_pct > 35.0 or yellow_pct > 35.0):
                 return False
 
         # 8 New Retail Dataset items
         elif lbl == "amul_ice_cream":
             # Creamy / pale / red / blue accents. Rejects bright lime green dominance.
-            if green_pct > 35.0:
+            if green_pct > 40.0:
                 return False
         elif lbl == "cake":
             # Britannia Cake: chocolate / warm bakery hues. Rejects cyan/bright blue dominance.
-            if blue_pct > 30.0:
+            if blue_pct > 35.0:
                 return False
         elif lbl == "cerave":
             # CeraVe: Clean white packaging with either cyan-blue (Lotion) or mint green (Hydrating Cleanser) accents.
-            # Rejects bright yellow or purple dominance.
-            if yellow_pct > 40.0 or purple_pct > 30.0:
+            # Rejects dominant yellow or hot magenta.
+            if yellow_pct > 45.0 or purple_pct > 40.0:
                 return False
         elif lbl == "hns_shampoo":
             # Head & Shoulders: Distinctive crisp white bottle with royal blue cap.
             # Rejects dominant orange / yellow.
-            if yellow_pct > 35.0:
+            if yellow_pct > 40.0:
                 return False
         elif lbl == "nestle_milk_powder":
             # Nestle Everyday: Vibrant sunny yellow & sky blue packaging.
-            # Reject if completely missing yellow/blue and dominated by pure red/purple.
-            if purple_pct > 30.0:
+            if purple_pct > 35.0:
                 return False
         elif lbl == "plum":
             # Plum: Plum/purple & herbal green tones. Rejects cyan/bright blue dominance.
-            if blue_pct > 30.0:
+            if blue_pct > 35.0:
                 return False
         elif lbl == "thums_up":
             # Thums Up: High-contrast red and deep navy blue. Rejects bright yellow/green dominance.
-            if yellow_pct > 30.0 or green_pct > 25.0:
+            if yellow_pct > 35.0 or green_pct > 30.0:
                 return False
         elif lbl == "wild_stone":
-            # Wild Stone product line includes Code Platinum (charcoal/silver), Forest Spice Soap (emerald green/black), etc.
-            # Rejects bright neon purple/magenta dominance
-            if purple_pct > 35.0:
+            # Wild Stone product line includes Code Platinum (charcoal/silver), Forest Spice Soap (emerald green/black).
+            if purple_pct > 40.0:
                 return False
         else:
-            # Missing verifier should normally mean verification unavailable
             return None
 
         return True
@@ -410,13 +454,30 @@ def _run_inference(img: Image.Image, user_id: str, conf_threshold: float = 0.25)
 
         crop = rgb_img.crop(crop_box)
 
-        # For very low confidence (borderline noise < 0.20), cross-check guards
+        # 1. Geometric Aspect Ratio Check (Eliminates physically impossible boxes)
+        aspect_res = _verify_aspect_ratio(box, lbl)
+        if aspect_res is False:
+            if conf < 0.65:
+                logger.info(f"📐 [Aspect Ratio Filter] Rejected implausible shape for {lbl} ({conf*100:.1f}%)")
+                continue
+            else:
+                conf = conf * 0.80
+
+        # 2. Packaging Color Verification (HSV profile with lighting tolerance)
+        c_res = _verify_color_signature(crop, lbl, conf=conf)
+        if c_res is False:
+            if conf < 0.45:
+                logger.info(f"🎨 [Color Guard] Rejected out-of-domain packaging color for {lbl} ({conf*100:.1f}%)")
+                continue
+            elif conf < 0.70:
+                conf = conf * 0.85
+
+        # 3. For very low confidence (borderline noise < 0.20), cross-check guards
         if conf < 0.20:
             try:
                 from retail_classifier import verify_crop_matches_label
                 v_res = verify_crop_matches_label(crop, lbl, min_matches=12)
-                c_res = _verify_color_signature(crop, lbl)
-                # Only suppress if both guards explicitly confirm mismatch
+                # Only suppress if both guards confirm mismatch
                 if v_res is False and c_res is False:
                     logger.info(f"🛡️ [Verification Guard] Filtered low-confidence noise: {lbl} ({conf*100:.1f}%)")
                     continue
