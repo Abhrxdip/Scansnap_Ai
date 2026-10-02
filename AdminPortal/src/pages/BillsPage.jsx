@@ -25,7 +25,11 @@ export default function BillsPage({ selectedBill, setSelectedBill }) {
     try {
       setLoading(true);
       const data = await fetchBills();
-      setBills(data || []);
+      const normalized = (data || []).map((b, idx) => ({
+        ...b,
+        bill_number: b.bill_number || (b.id ? (b.id.startsWith('BILL_') ? b.id : `INV-${b.id.slice(0, 8).toUpperCase()}`) : `INV-${1000 + idx}`)
+      }));
+      setBills(normalized);
     } catch (err) {
       console.error(err);
     } finally {
@@ -39,8 +43,9 @@ export default function BillsPage({ selectedBill, setSelectedBill }) {
 
   const filteredBills = useMemo(() => {
     return bills.filter(b => {
+      const billNo = (b.bill_number || b.id || '').toLowerCase();
       const matchSearch = 
-        b.bill_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        billNo.includes(searchQuery.toLowerCase()) ||
         b.customer_phone?.includes(searchQuery) ||
         b.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
       

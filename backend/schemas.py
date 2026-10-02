@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 # ─── Store Profile Schemas ─────────────────────────────────────────────────────
@@ -115,6 +115,12 @@ class BillResponse(BaseModel):
     payment_mode: str
     created_at: datetime
     items: List[BillItemResponse] = []
+
+    @computed_field
+    def bill_number(self) -> str:
+        if self.id and self.id.startswith("BILL_"):
+            return self.id
+        return f"INV-{self.id[:8].upper()}" if self.id else "INV-0001"
 
     model_config = {"from_attributes": True}
 
