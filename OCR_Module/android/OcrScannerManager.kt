@@ -172,7 +172,7 @@ class OcrScannerManager {
     }
 
     private val priceRegex = Regex(
-        """(?:₹|MRP|Rs\.?|INR)\s*[:\.]?\s*(\d+(?:\.\d{1,2})?)""",
+        """(?:₹|M\.?\s*R\.?\s*P\.?|Rs\.?|INR)\s*[:\.\-]?\s*(?:₹|Rs\.?)?\s*(\d+(?:\.\d{1,2})?)""",
         RegexOption.IGNORE_CASE
     )
 
@@ -208,28 +208,54 @@ class OcrScannerManager {
                     return@addOnSuccessListener
                 }
 
+                val allLines = visionText.textBlocks.flatMap { it.lines }
+                
+                val spatialLines = allLines.mapNotNull { line ->
+                    val box = line.boundingBox ?: return@mapNotNull null
+                    com.smartvendor.ai.ocr.spatial.SpatialTextLine(
+                        text = line.text.trim(),
+                        left = box.left,
+                        top = box.top,
+                        right = box.right,
+                        bottom = box.bottom
+                    )
+                }
+                
+                val reconstructedSpatialLines = com.smartvendor.ai.ocr.spatial.SpatialTextReconstructor.reconstruct(spatialLines)
+                
+                val reconstructedFullText = if (reconstructedSpatialLines.isNotEmpty()) {
+                    reconstructedSpatialLines.joinToString("\n") { it.text }
+                } else {
+                    fullText
+                }
+
                 var detectedPrice: Double? = null
                 var detectedName: String? = null
                 var detectedUnit: String? = null
 
-                // 1. Extract Price
-                val priceMatch = priceRegex.find(fullText)
+                // 1. Extract Price using Spatially Reconstructed Text
+                val priceMatch = priceRegex.find(reconstructedFullText)
                 if (priceMatch != null) {
                     val priceStr = priceMatch.groupValues[1]
                     detectedPrice = priceStr.toDoubleOrNull()
                 }
 
-                // 2. Extract Quantity/Unit (e.g. 1kg, 500ml, 1L)
-                val unitMatch = quantityUnitRegex.find(fullText)
+                // 2. Extract Quantity/Unit using Spatially Reconstructed Text
+                val unitMatch = quantityUnitRegex.find(reconstructedFullText)
                 if (unitMatch != null) {
                     detectedUnit = unitMatch.groupValues[1].uppercase(Locale.getDefault())
                 }
 
-                // 3. Extract Clean Brand/Product Lines (Sort by Bounding Box Area -> Biggest font title first!)
-                val allLines = visionText.textBlocks.flatMap { it.lines }
-                val validLines = allLines
-                    .filter { line ->
-                        val text = line.text.trim()
+                // 3. Extract Clean Brand/Product Lines
+                val finalLinesData = if (reconstructedSpatialLines.isEmpty() && allLines.isNotEmpty()) {
+                    allLines.map { Pair(it.text.trim(), it.boundingBox) }
+                } else {
+                    reconstructedSpatialLines.map { Pair(it.text, android.graphics.Rect(it.left, it.top, it.right, it.bottom)) }
+                }
+
+                val validLines = finalLinesData
+                    .filter { data ->
+                        val text = data.first
                         if (text.length < 3 || text.length > 40) return@filter false
                         if (priceRegex.containsMatchIn(text)) return@filter false
 
@@ -241,13 +267,13 @@ class OcrScannerManager {
                         nonNoiseTokens.isNotEmpty()
                     }
                     // Sort descending by text area so largest brand logo font is ranked first!
-                    .sortedByDescending { line ->
-                        val box = line.boundingBox ?: Rect()
+                    .sortedByDescending { data ->
+                        val box = data.second ?: Rect()
                         box.width() * box.height()
                     }
 
                 if (validLines.isNotEmpty()) {
-                    val topCandidateText = validLines.first().text.trim()
+                    val topCandidateText = validLines.first().first
                     detectedName = topCandidateText
                         .lowercase(Locale.getDefault())
                         .split(" ")
@@ -266,7 +292,7 @@ class OcrScannerManager {
                     }
                 }
 
-                val topBox = validLines.firstOrNull()?.boundingBox
+                val topBox = validLines.firstOrNull()?.second
                 val sampledColor = detectDominantColor(mediaImage, topBox, imageProxy.imageInfo.rotationDegrees)
 
                 if (!detectedName.isNullOrBlank()) {
@@ -308,88 +334,166 @@ class OcrScannerManager {
         val image = InputImage.fromBitmap(bitmap, 0)
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
-                val fullText = visionText.text
-                if (fullText.isBlank()) {
-                    onNotFound()
-                    return@addOnSuccessListener
-                }
-
-                var detectedPrice: Double? = null
-                var detectedName: String? = null
-                var detectedUnit: String? = null
-
-                val priceMatch = priceRegex.find(fullText)
-                if (priceMatch != null) {
-                    val priceStr = priceMatch.groupValues[1]
-                    detectedPrice = priceStr.toDoubleOrNull()
-                }
-
-                val unitMatch = quantityUnitRegex.find(fullText)
-                if (unitMatch != null) {
-                    detectedUnit = unitMatch.groupValues[1].uppercase(Locale.getDefault())
-                }
-
-                val allLines = visionText.textBlocks.flatMap { it.lines }
-                val validLines = allLines
-                    .filter { line ->
-                        val text = line.text.trim()
-                        if (text.length < 3 || text.length > 40) return@filter false
-                        if (priceRegex.containsMatchIn(text)) return@filter false
-
-                        val lineLower = text.lowercase(Locale.getDefault())
-                        val tokens = lineLower.split(Regex("""[\s\-_,.:;]+""")).filter { it.isNotBlank() }
-
-                        val nonNoiseTokens = tokens.filter { t -> t !in noiseWords && t.length >= 2 }
-                        nonNoiseTokens.isNotEmpty()
-                    }
-                    .sortedByDescending { line ->
-                        val box = line.boundingBox ?: Rect()
-                        box.width() * box.height()
-                    }
-
-                if (validLines.isNotEmpty()) {
-                    val topCandidateText = validLines.first().text.trim()
-                    detectedName = topCandidateText
-                        .lowercase(Locale.getDefault())
-                        .split(" ")
-                        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
-                }
-
-                if (detectedPrice == null) {
-                    allLines.forEach { line ->
-                        if (line.text.contains("₹") || line.text.contains("Rs", ignoreCase = true)) {
-                            val match = standalonePriceRegex.find(line.text)
-                            if (match != null) {
-                                detectedPrice = match.groupValues[1].toDoubleOrNull()
-                            }
-                        }
-                    }
-                }
-
-                if (!detectedName.isNullOrBlank()) {
-                    val combinedName = if (!detectedUnit.isNullOrBlank() && !detectedName!!.contains(detectedUnit!!, ignoreCase = true)) {
-                        "$detectedName $detectedUnit"
-                    } else {
-                        detectedName!!
-                    }
-
-                    onSuccess(
-                        OcrResult(
-                            productName = detectedName!!,
-                            quantityUnit = detectedUnit,
-                            fullCombinedName = combinedName,
-                            price = detectedPrice,
-                            detectedColor = PackagingColor.UNKNOWN
-                        )
-                    )
+                val ocrResult = parseOcrText(visionText)
+                if (ocrResult != null) {
+                    onSuccess(ocrResult)
                 } else {
-                    onNotFound()
+                    // ADAPTIVE PREPROCESSING SECOND PASS (Fallback for Glare/Low Contrast)
+                    try {
+                        val enhancedBitmap = preprocessBitmapForOCR(bitmap)
+                        val enhancedImage = InputImage.fromBitmap(enhancedBitmap, 0)
+                        
+                        recognizer.process(enhancedImage)
+                            .addOnSuccessListener { visionText2 ->
+                                val ocrResult2 = parseOcrText(visionText2)
+                                if (ocrResult2 != null) {
+                                    onSuccess(ocrResult2)
+                                } else {
+                                    onNotFound()
+                                }
+                            }
+                            .addOnFailureListener {
+                                onNotFound()
+                            }
+                    } catch (e: Exception) {
+                        onNotFound()
+                    }
                 }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "OCR recognition error on bitmap", e)
                 onError(e)
             }
+    }
+
+    private fun preprocessBitmapForOCR(original: android.graphics.Bitmap): android.graphics.Bitmap {
+        val result = android.graphics.Bitmap.createBitmap(original.width, original.height, original.config ?: android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(result)
+        val paint = android.graphics.Paint()
+        
+        // Enhance contrast by 1.5x, reduce brightness by -30 to recover glare regions
+        val scale = 1.5f
+        val translate = -30f
+        
+        val matrix = android.graphics.ColorMatrix(floatArrayOf(
+            scale, 0f, 0f, 0f, translate,
+            0f, scale, 0f, 0f, translate,
+            0f, 0f, scale, 0f, translate,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        
+        // Also convert to grayscale to remove color noise for OCR
+        val grayscaleMatrix = android.graphics.ColorMatrix()
+        grayscaleMatrix.setSaturation(0f)
+        
+        grayscaleMatrix.postConcat(matrix)
+        
+        paint.colorFilter = android.graphics.ColorMatrixColorFilter(grayscaleMatrix)
+        canvas.drawBitmap(original, 0f, 0f, paint)
+        
+        return result
+    }
+
+    private fun parseOcrText(visionText: com.google.mlkit.vision.text.Text): OcrResult? {
+        val fullText = visionText.text
+        if (fullText.isBlank()) {
+            return null
+        }
+
+        val allLines = visionText.textBlocks.flatMap { it.lines }
+        
+        val spatialLines = allLines.mapNotNull { line ->
+            val box = line.boundingBox ?: return@mapNotNull null
+            com.smartvendor.ai.ocr.spatial.SpatialTextLine(
+                text = line.text.trim(),
+                left = box.left,
+                top = box.top,
+                right = box.right,
+                bottom = box.bottom
+            )
+        }
+        
+        val reconstructedSpatialLines = com.smartvendor.ai.ocr.spatial.SpatialTextReconstructor.reconstruct(spatialLines)
+        
+        val reconstructedFullText = if (reconstructedSpatialLines.isNotEmpty()) {
+            reconstructedSpatialLines.joinToString("\n") { it.text }
+        } else {
+            fullText
+        }
+
+        var detectedPrice: Double? = null
+        var detectedName: String? = null
+        var detectedUnit: String? = null
+
+        val priceMatch = priceRegex.find(reconstructedFullText)
+        if (priceMatch != null) {
+            val priceStr = priceMatch.groupValues[1]
+            detectedPrice = priceStr.toDoubleOrNull()
+        }
+
+        val unitMatch = quantityUnitRegex.find(reconstructedFullText)
+        if (unitMatch != null) {
+            detectedUnit = unitMatch.groupValues[1].uppercase(Locale.getDefault())
+        }
+
+        val finalLinesData = if (reconstructedSpatialLines.isEmpty() && allLines.isNotEmpty()) {
+            allLines.map { Pair(it.text.trim(), it.boundingBox) }
+        } else {
+            reconstructedSpatialLines.map { Pair(it.text, android.graphics.Rect(it.left, it.top, it.right, it.bottom)) }
+        }
+
+        val validLines = finalLinesData
+            .filter { data ->
+                val text = data.first
+                if (text.length < 3 || text.length > 40) return@filter false
+                if (priceRegex.containsMatchIn(text)) return@filter false
+
+                val lineLower = text.lowercase(Locale.getDefault())
+                val tokens = lineLower.split(Regex("""[\s\-_,.:;]+""")).filter { it.isNotBlank() }
+
+                val nonNoiseTokens = tokens.filter { t -> t !in noiseWords && t.length >= 2 }
+                nonNoiseTokens.isNotEmpty()
+            }
+            .sortedByDescending { data ->
+                val box = data.second ?: Rect()
+                box.width() * box.height()
+            }
+
+        if (validLines.isNotEmpty()) {
+            val topCandidateText = validLines.first().first
+            detectedName = topCandidateText
+                .lowercase(Locale.getDefault())
+                .split(" ")
+                .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+        }
+
+        if (detectedPrice == null) {
+            allLines.forEach { line ->
+                if (line.text.contains("₹") || line.text.contains("Rs", ignoreCase = true)) {
+                    val match = standalonePriceRegex.find(line.text)
+                    if (match != null) {
+                        detectedPrice = match.groupValues[1].toDoubleOrNull()
+                    }
+                }
+            }
+        }
+
+        if (!detectedName.isNullOrBlank()) {
+            val combinedName = if (!detectedUnit.isNullOrBlank() && !detectedName!!.contains(detectedUnit!!, ignoreCase = true)) {
+                "$detectedName $detectedUnit"
+            } else {
+                detectedName!!
+            }
+
+            return OcrResult(
+                productName = detectedName!!,
+                quantityUnit = detectedUnit,
+                fullCombinedName = combinedName,
+                price = detectedPrice,
+                detectedColor = PackagingColor.UNKNOWN
+            )
+        }
+        return null
     }
 
     private fun detectDominantColor(yuvImage: android.media.Image, boundingBox: Rect?, rotationDegrees: Int): PackagingColor {
