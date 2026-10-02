@@ -15,6 +15,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.on_event("startup")
+def startup_event():
+    try:
+        from routers.detect import _get_model
+        _get_model()
+    except Exception as e:
+        print(f"Notice: Model warm-up skipped: {e}")
+
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")
 if ALLOWED_ORIGINS:

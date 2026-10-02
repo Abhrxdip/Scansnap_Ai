@@ -542,7 +542,7 @@ def _run_inference(img: Image.Image, user_id: str, conf_threshold: float = 0.25)
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/image", response_model=DetectResponse, summary="Detect products in an uploaded image")
-async def detect_from_upload(
+def detect_from_upload(
     user_id: CurrentUser,
     file: UploadFile = File(...),
     conf: float = Form(default=0.25)
@@ -552,7 +552,7 @@ async def detect_from_upload(
     The Android app and Admin Portal send an image frame here.
     """
     try:
-        contents = await file.read()
+        contents = file.file.read()
         if not contents or len(contents) == 0:
             raise HTTPException(status_code=400, detail="Uploaded image file is empty")
         if len(contents) > 25 * 1024 * 1024:
@@ -602,7 +602,7 @@ async def detect_from_upload(
 
 
 @router.post("/base64", response_model=DetectResponse, summary="Detect products from a base64 image")
-async def detect_from_base64(
+def detect_from_base64(
     user_id: CurrentUser,
     payload: dict
 ):

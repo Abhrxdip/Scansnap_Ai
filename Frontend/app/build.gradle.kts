@@ -30,7 +30,7 @@ android {
 
     buildTypes {
         getByName("debug") {
-            buildConfigField("String", "API_BASE_URL", "\"http://192.168.31.69:8000/\"")
+            buildConfigField("String", "API_BASE_URL", "\"http://192.168.0.101:8000/\"")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
