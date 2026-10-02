@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ScanSnap AI — Hackathon Barcode & OCR Test Sheet</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap');
 
@@ -334,6 +335,7 @@
 
     const PRODUCTS = [
       {
+        id: "amul_ice_cream",
         name: "Amul Ice Cream Cup Vanilla Magic 100ml",
         category: "Dairy & Frozen",
         price: 30,
@@ -344,6 +346,7 @@
         ocr_text: "AMUL ICE CREAM CUP VANILLA MAGIC 100ml MRP Rs 30.00"
       },
       {
+        id: "cake",
         name: "Britannia Cake Gobbles Choco Chill 65g",
         category: "Bakery & Cakes",
         price: 30,
@@ -354,6 +357,7 @@
         ocr_text: "BRITANNIA CAKE GOBBLES CHOCO CHILL 65g MRP Rs. 30.00"
       },
       {
+        id: "cerave",
         name: "CeraVe Hydrating Cleanser 236ml",
         category: "Personal Care",
         price: 900,
@@ -364,6 +368,7 @@
         ocr_text: "CERAVE HYDRATING CLEANSER 236ml FOR NORMAL TO DRY SKIN"
       },
       {
+        id: "hns_shampoo",
         name: "Head & Shoulders Cool Menthol Anti-Dandruff Shampoo 180ml",
         category: "Personal Care",
         price: 250,
@@ -374,6 +379,7 @@
         ocr_text: "HEAD & SHOULDERS COOL MENTHOL SHAMPOO 180ml MRP Rs 250.00"
       },
       {
+        id: "nestle_milk_powder",
         name: "Nestle Everyday Dairy Whitener Milk Powder 20g",
         category: "Dairy & Beverages",
         price: 10,
@@ -384,6 +390,7 @@
         ocr_text: "NESTLE EVERYDAY DAIRY WHITENER MILK POWDER 20g MRP ₹ 10.00"
       },
       {
+        id: "plum",
         name: "Plum Green Tea Pore Cleansing Face Wash 100ml",
         category: "Personal Care",
         price: 350,
@@ -394,6 +401,7 @@
         ocr_text: "PLUM GREEN TEA PORE CLEANSING FACE WASH 100ml MRP Rs 350.00"
       },
       {
+        id: "thums_up",
         name: "Thums Up Charged Carbonated Beverage 250ml Can",
         category: "Beverages",
         price: 20,
@@ -404,6 +412,7 @@
         ocr_text: "THUMS UP CHARGED CARBONATED BEVERAGE 250ml CAN MRP Rs 20.00"
       },
       {
+        id: "wild_stone",
         name: "Wild Stone Forest Spice Deodorant Soap 125g",
         category: "Personal Care",
         price: 70,
@@ -414,6 +423,7 @@
         ocr_text: "WILD STONE FOREST SPICE DEODORANT SOAP 125g MRP Rs 70.00"
       },
       {
+        id: "maggi",
         name: "Maggi 2-Minute Masala Noodles 70g",
         category: "Instant Foods",
         price: 14,
@@ -424,6 +434,7 @@
         ocr_text: "MAGGI 2-MINUTE MASALA NOODLES NET WT 70g MRP Rs 14.00"
       },
       {
+        id: "oreo",
         name: "Cadbury Oreo Original Biscuits 120g",
         category: "Snacks & Biscuits",
         price: 35,
@@ -434,6 +445,7 @@
         ocr_text: "CADBURY OREO ORIGINAL SANDWICH BISCUITS 120g MRP Rs 35.00"
       },
       {
+        id: "bourbon_biscuit",
         name: "Britannia Bourbon Chocolate Biscuits 150g",
         category: "Snacks & Biscuits",
         price: 30,
@@ -444,6 +456,7 @@
         ocr_text: "BRITANNIA BOURBON CHOCOLATE CREAM BISCUITS 150g MRP Rs 30.00"
       },
       {
+        id: "milky_biscuit",
         name: "Britannia Milk Bikis Biscuits 100g",
         category: "Snacks & Biscuits",
         price: 20,
@@ -454,6 +467,7 @@
         ocr_text: "BRITANNIA MILK BIKIS BISCUITS 100g ENERGY BOOST MRP Rs 20.00"
       },
       {
+        id: "surf_excel",
         name: "Surf Excel Easy Wash Detergent 1kg",
         category: "Laundry & Household",
         price: 120,
@@ -464,6 +478,7 @@
         ocr_text: "SURF EXCEL EASY WASH DETERGENT POWDER 1KG MRP Rs 120.00"
       },
       {
+        id: "hide_and_seek",
         name: "Parle Hide & Seek Choco Chip Biscuits 100g",
         category: "Snacks & Biscuits",
         price: 30,
@@ -474,6 +489,7 @@
         ocr_text: "PARLE HIDE & SEEK CHOCO CHIP BISCUITS 100g MRP Rs 30.00"
       },
       {
+        id: "appe_fizz",
         name: "Appy Fizz Sparkling Apple Juice 160ml",
         category: "Beverages",
         price: 35,
@@ -484,6 +500,7 @@
         ocr_text: "APPY FIZZ SPARKLING APPLE JUICE DRINK 160ml MRP Rs 35.00"
       },
       {
+        id: "nivea_deodorant",
         name: "Nivea Men Fresh Active Deodorant 150ml",
         category: "Personal Care",
         price: 199,
@@ -496,7 +513,7 @@
     ];
 
     const container = document.getElementById('cards-container');
-    container.innerHTML = PRODUCTS.map(p => `
+    container.innerHTML = PRODUCTS.map((p, idx) => `
       <div class="card">
         <div class="card-top">
           <div>
@@ -513,8 +530,9 @@
           </div>
         </div>
 
-        <div class="barcode-box">
-          ${makeBarcodeSvg(p.barcode)}
+        <div class="barcode-box" style="padding: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #FFFFFF; border-radius: 6px;">
+          <img src="../python/generated_barcodes/${p.id}.png" alt="Barcode ${p.barcode}" style="max-height: 85px; width: auto; max-width: 95%; object-fit: contain; display: block; margin: 0 auto;" onerror="this.style.display='none'; document.getElementById('fallback-svg-${idx}').style.display='block';" />
+          <svg id="fallback-svg-${idx}" class="barcode-svg" style="display: none;"></svg>
         </div>
 
         <div class="ocr-box">
@@ -523,6 +541,27 @@
         </div>
       </div>
     `).join('');
+
+    // Render JsBarcode fallbacks
+    if (window.JsBarcode) {
+      PRODUCTS.forEach((p, idx) => {
+        try {
+          const svgEl = document.getElementById(`fallback-svg-${idx}`);
+          if (svgEl) {
+            JsBarcode(svgEl, p.barcode, {
+              format: p.barcode.length === 13 ? "EAN13" : (p.barcode.length === 8 ? "EAN8" : "CODE128"),
+              width: 2,
+              height: 55,
+              displayValue: true,
+              fontSize: 13,
+              lineColor: "#0A0A0A"
+            });
+          }
+        } catch (e) {
+          console.warn("JsBarcode error for", p.barcode, e);
+        }
+      });
+    }
   </script>
 </body>
 </html>

@@ -12,12 +12,7 @@ class BarcodeScannerManager {
 
     private val options = BarcodeScannerOptions.Builder()
         .setBarcodeFormats(
-            Barcode.FORMAT_EAN_13,
-            Barcode.FORMAT_EAN_8,
-            Barcode.FORMAT_UPC_A,
-            Barcode.FORMAT_UPC_E,
-            Barcode.FORMAT_QR_CODE,
-            Barcode.FORMAT_CODE_128
+            Barcode.FORMAT_ALL_FORMATS
         )
         .build()
 
@@ -44,7 +39,7 @@ class BarcodeScannerManager {
                 if (barcodes.isNotEmpty()) {
                     val rawValue = barcodes.first().rawValue
                     if (!rawValue.isNullOrBlank()) {
-                        onSuccess(rawValue!!)
+                        onSuccess(rawValue)
                     } else {
                         onNotFound()
                     }
@@ -55,6 +50,32 @@ class BarcodeScannerManager {
             .addOnFailureListener { e ->
                 imageProxy.close()
                 Log.e(TAG, "Barcode scan error", e)
+                onError(e)
+            }
+    }
+
+    fun scanBitmap(
+        bitmap: android.graphics.Bitmap,
+        onSuccess: (String) -> Unit,
+        onNotFound: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val image = InputImage.fromBitmap(bitmap, 0)
+        scanner.process(image)
+            .addOnSuccessListener { barcodes ->
+                if (barcodes.isNotEmpty()) {
+                    val rawValue = barcodes.first().rawValue
+                    if (!rawValue.isNullOrBlank()) {
+                        onSuccess(rawValue)
+                    } else {
+                        onNotFound()
+                    }
+                } else {
+                    onNotFound()
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Barcode scan bitmap error", e)
                 onError(e)
             }
     }

@@ -44,18 +44,48 @@ class ProductRepositoryImpl : ProductRepository {
         }
     }
 
+    private val masterCatalog = listOf(
+        Product(id = "maggi", name = "Maggi 2-Minute Masala Noodles", price = 14.0, stock = 100, category = "Instant Foods", barcode = "8901058852311"),
+        Product(id = "oreo", name = "Cadbury Oreo Original Biscuits", price = 35.0, stock = 100, category = "Snacks & Biscuits", barcode = "7622201737018"),
+        Product(id = "amul_ice_cream", name = "Amul Ice Cream Cup Vanilla Magic 100ml", price = 30.0, stock = 100, category = "Dairy & Bakery", barcode = "8901262010014"),
+        Product(id = "cake", name = "Britannia Cake Gobbles Choco Chill 65g", price = 30.0, stock = 100, category = "Dairy & Bakery", barcode = "8901063142018"),
+        Product(id = "cerave", name = "CeraVe Hydrating Cleanser 236ml", price = 900.0, stock = 100, category = "Personal Care", barcode = "3337875597371"),
+        Product(id = "hns_shampoo", name = "Head & Shoulders Cool Menthol Shampoo 180ml", price = 250.0, stock = 100, category = "Personal Care", barcode = "4902430730013"),
+        Product(id = "nestle_milk_powder", name = "Nestle Everyday Dairy Whitener 20g", price = 10.0, stock = 100, category = "Dairy & Beverages", barcode = "8901058852314"),
+        Product(id = "plum", name = "Plum Green Tea Pore Cleansing Face Wash 100ml", price = 350.0, stock = 100, category = "Personal Care", barcode = "8906118410214"),
+        Product(id = "thums_up", name = "Thums Up Charged Carbonated Beverage 250ml", price = 20.0, stock = 100, category = "Beverages", barcode = "8901764012211"),
+        Product(id = "wild_stone", name = "Wild Stone Forest Spice Deodorant Soap 125g", price = 70.0, stock = 100, category = "Personal Care", barcode = "8904006304218"),
+        Product(id = "bourbon_biscuit", name = "Britannia Bourbon Chocolate Biscuits", price = 30.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901063012014"),
+        Product(id = "milky_biscuit", name = "Britannia Milk Bikis Biscuits", price = 20.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901063141011"),
+        Product(id = "surf_excel", name = "Surf Excel Easy Wash Detergent 1kg", price = 120.0, stock = 100, category = "Laundry & Household", barcode = "8901030012015"),
+        Product(id = "hide_and_seek", name = "Parle Hide & Seek Choco Chip Biscuits", price = 30.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901719101014"),
+        Product(id = "appe_fizz", name = "Appy Fizz Sparkling Apple Juice 160ml", price = 35.0, stock = 100, category = "Beverages", barcode = "8902579100018"),
+        Product(id = "jim_jam", name = "Britannia Treat Jim Jam Biscuits", price = 35.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901063015015"),
+        Product(id = "nivea_deodorant", name = "Nivea Men Fresh Active Deodorant 150ml", price = 199.0, stock = 100, category = "Personal Care", barcode = "4005808816033")
+    )
+
     override suspend fun getProductByBarcode(barcode: String): Result<Product?> {
+        val trimmed = barcode.trim()
+        val localMatch = cachedProducts.find { it.barcode.trim() == trimmed }
+            ?: masterCatalog.find { it.barcode.trim() == trimmed }
+
+        if (localMatch != null) {
+            return Result.success(localMatch)
+        }
+
         return try {
-            val response = api.getProductByBarcode(barcode)
+            val response = api.getProductByBarcode(trimmed)
             if (response.isSuccessful) {
-                Result.success(response.body()?.toDomain())
+                Result.success(response.body()?.toDomain() ?: localMatch)
             } else if (response.code() == 404) {
-                Result.success(null)
+                Result.success(localMatch)
             } else {
-                Result.failure(Exception("Server error: ${response.code()}"))
+                if (localMatch != null) Result.success(localMatch)
+                else Result.failure(Exception("Server error: ${response.code()}"))
             }
         } catch (ex: Exception) {
-            Result.failure(ex)
+            if (localMatch != null) Result.success(localMatch)
+            else Result.failure(ex)
         }
     }
 
