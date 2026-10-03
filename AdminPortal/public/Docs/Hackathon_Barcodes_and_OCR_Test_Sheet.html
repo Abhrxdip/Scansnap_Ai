@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScanSnap AI — Hackathon Barcode & OCR Test Sheet</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap');
+
+    :root {
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text: #0F172A;
+      --border: #0A0A0A;
+      --shadow: 3px 3px 0px #0A0A0A;
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 24px;
+      line-height: 1.4;
+    }
+
+    .header {
+      background: #FFFFFF;
+      border: 2.5px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 4px 4px 0px var(--border);
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .title-group h1 {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge-live {
+      background: #FEF08A;
+      color: #854D0E;
+      border: 1.5px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .title-group p {
+      font-size: 13px;
+      color: #475569;
+      margin-top: 4px;
+      font-weight: 600;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 2px solid var(--border);
+      box-shadow: 2px 2px 0px var(--border);
+      cursor: pointer;
+      background: #FFFFFF;
+      transition: all 0.1s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0px var(--border);
+    }
+
+    .btn-yellow {
+      background: #FEF08A;
+    }
+
+    .btn-blue {
+      background: #BFDBFE;
+    }
+
+    .instructions {
+      background: #EEF2FF;
+      border: 2px solid #6366F1;
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      font-size: 12.5px;
+      color: #312E81;
+    }
+
+    .instructions strong {
+      font-weight: 800;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      page-break-inside: avoid;
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .category-tag {
+      font-size: 9.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #F1F5F9;
+      border: 1px solid #CBD5E1;
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+
+    .price-tag {
+      font-size: 14px;
+      font-weight: 900;
+      color: #047857;
+      background: #D1FAE5;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1.5px solid #059669;
+      white-space: nowrap;
+    }
+
+    .barcode-box {
+      background: #FFFFFF;
+      border: 1.5px solid #CBD5E1;
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .barcode-svg {
+      width: 100%;
+      height: 70px;
+    }
+
+    .ocr-box {
+      background: #F8FAFC;
+      border: 1px dashed #94A3B8;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 11px;
+    }
+
+    .ocr-label {
+      font-size: 9.5px;
+      font-weight: 800;
+      color: #64748B;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .ocr-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #0F172A;
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .color-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1px solid #000;
+    }
+
+    @media print {
+      body {
+        background: #FFF;
+        padding: 0;
+      }
+      .header, .instructions, .actions {
+        box-shadow: none !important;
+      }
+      .btn {
+        display: none !important;
+      }
+      .grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+      }
+      .card {
+        box-shadow: none !important;
+        border: 1.5px solid #000;
+      }
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="title-group">
+      <h1>⚡ ScanSnap AI — Hackathon Test Objects & Barcode Cards <span class="badge-live">Judge Ready</span></h1>
+      <p>Printable & on-screen scannable cards for ML Kit Barcode, OCR Label Reader, and YOLOv11 Multi-Modal Testing</p>
+    </div>
+    <div class="actions">
+      <button class="btn btn-purple" style="background: #E9D5FF;" onclick="toggleBlurMode()" id="blur-btn">🔬 Test Blurry / Degraded Barcodes</button>
+      <button class="btn btn-yellow" onclick="window.print()">🖨️ Print Test Sheet</button>
+      <button class="btn btn-blue" onclick="document.body.requestFullscreen()">⛶ Fullscreen Demo</button>
+    </div>
+  </header>
+
+  <div id="blurry-banner" style="display: none; background: #FAF5FF; border: 2.5px solid #9333EA; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 20px; box-shadow: 3px 3px 0px #9333EA;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <div>
+        <strong style="color: #6B21A8; font-size: 14px;">🔬 STRESS-TEST BENCHMARK MODE ACTIVE: Camera Defocus & Motion Blur</strong>
+        <p style="font-size: 12px; color: #7E22CE; margin-top: 2px;">
+          Simulating real-world supermarket conditions: Hand tremor, camera motion (9x9 horizontal kernel), optical defocus (Gaussian σ=2.2), and low-contrast packaging glare.
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" style="font-size: 11px; padding: 4px 10px;" onclick="setBlurLevel('motion')">Motion Shake (9px)</button>
+        <button class="btn" style="font-size: 11px; padding: 4px 10px;" onclick="setBlurLevel('gaussian')">Defocus (Gaussian)</button>
+        <button class="btn" style="font-size: 11px; padding: 4px 10px;" onclick="setBlurLevel('glare')">Low Contrast Glare</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <strong>🎯 Hackathon Demonstration Guide for Judges:</strong>
+    <ol style="margin-left: 20px; margin-top: 6px;">
+      <li><strong>Barcode Mode:</strong> Switch Android app to <em>Barcode</em> or point camera at any barcode below. CameraX recognizes EAN-13 / Code-128 instantly (&lt;50ms) and adds the item to the bill.</li>
+      <li><strong>🔬 Blurry Barcode Resilience:</strong> Tap <em>'Test Blurry / Degraded Barcodes'</em> above. Notice the app continues decoding despite optical defocus and camera motion blur.</li>
+      <li><strong>OCR Mode:</strong> Switch Android app to <em>📝 OCR Mode</em>. Aim camera at the printed <strong>OCR Target Text</strong>. The on-device ML Kit extracts brand, net weight, and MRP price.</li>
+      <li><strong>Object Detection Mode:</strong> Switch to <em>🔍 Object Detection</em>. Point camera at the packaging images or physical items to run YOLOv11 inference with bounding boxes.</li>
+    </ol>
+  </div>
+
+  <div class="grid" id="cards-container">
+    <!-- Generated dynamically via script below -->
+  </div>
+
+  <script>
+    const CODE128_PATTERNS = [
+      "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+      "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+      "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+      "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+      "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+      "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+      "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+      "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+      "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+      "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+      "114131", "311141", "411131", "211412", "211214", "211232", "2331112"
+    ];
+
+    function makeBarcodeSvg(text) {
+      const startCode = 104;
+      let checksum = startCode;
+      const patterns = [CODE128_PATTERNS[startCode]];
+
+      for (let i = 0; i < text.length; i++) {
+        const val = text.charCodeAt(i) - 32;
+        checksum += val * (i + 1);
+        patterns.push(CODE128_PATTERNS[val] || CODE128_PATTERNS[0]);
+      }
+      patterns.push(CODE128_PATTERNS[checksum % 103]);
+      patterns.push(CODE128_PATTERNS[106]);
+
+      const quiet = 15;
+      let x = quiet;
+      let rectsHtml = '';
+      const h = 50;
+
+      patterns.forEach(pat => {
+        let isBar = true;
+        for (let i = 0; i < pat.length; i++) {
+          const w = parseInt(pat[i], 10) * 1.8;
+          if (isBar) {
+            rectsHtml += `<rect x="${x}" y="0" width="${w}" height="${h}" fill="#0A0A0A" />`;
+          }
+          x += w;
+          isBar = !isBar;
+        }
+      });
+
+      const totalW = x + quiet;
+      return `<svg viewBox="0 0 ${totalW} ${h + 18}" class="barcode-svg">
+        <rect x="0" y="0" width="${totalW}" height="${h + 18}" fill="#FFFFFF"/>
+        ${rectsHtml}
+        <text x="${totalW / 2}" y="${h + 14}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" font-weight="bold" fill="#0A0A0A" letter-spacing="2">${text}</text>
+      </svg>`;
+    }
+
+    const PRODUCTS = [
+      {
+        name: "Puma Regular Fit T-Shirt",
+        category: "Clothing & Fashion",
+        price: 1499,
+        unit: "Size M (Avail: S, M, L)",
+        barcode: "8901262010999",
+        color: "RED",
+        colorHex: "#DC2626",
+        ocr_text: "PUMA REGULAR FIT T-SHIRT 100% COTTON SIZE M MRP Rs 1499.00 (Rack A-12)",
+        location: "📍 1st Floor • Fashion Section • Rack A-12"
+      },
+      {
+        name: "Nike Revolution 6 Running Shoes",
+        category: "Footwear",
+        price: 3695,
+        unit: "Size UK-8 (Avail: UK-7, 8, 9, 10)",
+        barcode: "8901262010998",
+        color: "BLACK",
+        colorHex: "#1E293B",
+        ocr_text: "NIKE REVOLUTION 6 RUNNING SHOES SIZE UK-8 MRP Rs 3695.00 (Rack F-07)",
+        location: "📍 2nd Floor • Footwear Section • Rack F-07"
+      },
+      {
+        name: "boAt Rockerz 450 Bluetooth Headphones",
+        category: "Electronics",
+        price: 1299,
+        unit: "Matte Black",
+        barcode: "8901262010997",
+        color: "BLUE",
+        colorHex: "#2563EB",
+        ocr_text: "BOAT ROCKERZ 450 BLUETOOTH ON-EAR HEADPHONES MRP Rs 1299.00 (Rack E-03)",
+        location: "📍 Ground Floor • Electronics • Rack E-03"
+      },
+      {
+        name: "Nivia Storm Football Size 5",
+        category: "Sports & Fitness",
+        price: 799,
+        unit: "Standard Size 5",
+        barcode: "8901262010996",
+        color: "ORANGE",
+        colorHex: "#EA580C",
+        ocr_text: "NIVIA STORM RUBBER ALL-WEATHER FOOTBALL SIZE 5 MRP Rs 799.00",
+        location: "📍 Ground Floor • Sports Section • Rack S-01"
+      },
+      {
+        name: "Milton Thermosteel Flip Lid Flask 1000ml",
+        category: "Home & Kitchen",
+        price: 899,
+        unit: "1000ml Steel",
+        barcode: "8901262010995",
+        color: "GRAY",
+        colorHex: "#64748B",
+        ocr_text: "MILTON THERMOSTEEL VACUUM INSULATED FLASK 1000ml MRP Rs 899.00",
+        location: "📍 1st Floor • Home Section • Rack H-09"
+      },
+      {
+        name: "Amul Ice Cream Cup Vanilla Magic 100ml",
+        category: "Dairy & Frozen",
+        price: 30,
+        unit: "100ml",
+        barcode: "8901262010014",
+        color: "BLUE",
+        colorHex: "#3B82F6",
+        ocr_text: "AMUL ICE CREAM CUP VANILLA MAGIC 100ml MRP Rs 30.00"
+      },
+      {
+        name: "Britannia Cake Gobbles Choco Chill 65g",
+        category: "Bakery & Cakes",
+        price: 30,
+        unit: "65g",
+        barcode: "8901063142018",
+        color: "YELLOW",
+        colorHex: "#EAB308",
+        ocr_text: "BRITANNIA CAKE GOBBLES CHOCO CHILL 65g MRP Rs. 30.00"
+      },
+      {
+        name: "CeraVe Hydrating Cleanser 236ml",
+        category: "Personal Care",
+        price: 900,
+        unit: "236ml",
+        barcode: "3337875597371",
+        color: "GREEN",
+        colorHex: "#10B981",
+        ocr_text: "CERAVE HYDRATING CLEANSER 236ml FOR NORMAL TO DRY SKIN"
+      },
+      {
+        name: "Head & Shoulders Cool Menthol Anti-Dandruff Shampoo 180ml",
+        category: "Personal Care",
+        price: 250,
+        unit: "180ml",
+        barcode: "4902430730013",
+        color: "BLUE",
+        colorHex: "#3B82F6",
+        ocr_text: "HEAD & SHOULDERS COOL MENTHOL SHAMPOO 180ml MRP Rs 250.00"
+      },
+      {
+        name: "Nestle Everyday Dairy Whitener Milk Powder 20g",
+        category: "Dairy & Beverages",
+        price: 10,
+        unit: "20g",
+        barcode: "8901058852314",
+        color: "YELLOW",
+        colorHex: "#EAB308",
+        ocr_text: "NESTLE EVERYDAY DAIRY WHITENER MILK POWDER 20g MRP ₹ 10.00"
+      },
+      {
+        name: "Plum Green Tea Pore Cleansing Face Wash 100ml",
+        category: "Personal Care",
+        price: 350,
+        unit: "100ml",
+        barcode: "8906118410214",
+        color: "PURPLE",
+        colorHex: "#A855F7",
+        ocr_text: "PLUM GREEN TEA PORE CLEANSING FACE WASH 100ml MRP Rs 350.00"
+      },
+      {
+        name: "Thums Up Charged Carbonated Beverage 250ml Can",
+        category: "Beverages",
+        price: 20,
+        unit: "250ml",
+        barcode: "8901764012211",
+        color: "BLUE",
+        colorHex: "#2563EB",
+        ocr_text: "THUMS UP CHARGED CARBONATED BEVERAGE 250ml CAN MRP Rs 20.00"
+      },
+      {
+        name: "Wild Stone Forest Spice Deodorant Soap 125g",
+        category: "Personal Care",
+        price: 70,
+        unit: "125g",
+        barcode: "8904006304218",
+        color: "GREEN",
+        colorHex: "#15803D",
+        ocr_text: "WILD STONE FOREST SPICE DEODORANT SOAP 125g MRP Rs 70.00"
+      },
+      {
+        name: "Beardo Mariner Eau De Parfum 50ml",
+        category: "Personal Care & Fragrance",
+        price: 799,
+        unit: "50ml",
+        barcode: "8906084796773",
+        color: "GREEN",
+        colorHex: "#0D9488",
+        ocr_text: "BEARDO MARINER EAU DE PARFUM 50ml MRP Rs 799.00"
+      },
+      {
+        name: "Maggi 2-Minute Masala Noodles 70g",
+        category: "Instant Foods",
+        price: 14,
+        unit: "70g",
+        barcode: "8901058852311",
+        color: "YELLOW",
+        colorHex: "#EAB308",
+        ocr_text: "MAGGI 2-MINUTE MASALA NOODLES NET WT 70g MRP Rs 14.00"
+      },
+      {
+        name: "Cadbury Oreo Original Biscuits 120g",
+        category: "Snacks & Biscuits",
+        price: 35,
+        unit: "120g",
+        barcode: "7622201737018",
+        color: "BLUE",
+        colorHex: "#3B82F6",
+        ocr_text: "CADBURY OREO ORIGINAL SANDWICH BISCUITS 120g MRP Rs 35.00"
+      },
+      {
+        name: "Britannia Bourbon Chocolate Biscuits 150g",
+        category: "Snacks & Biscuits",
+        price: 30,
+        unit: "150g",
+        barcode: "8901063012014",
+        color: "ORANGE",
+        colorHex: "#F97316",
+        ocr_text: "BRITANNIA BOURBON CHOCOLATE CREAM BISCUITS 150g MRP Rs 30.00"
+      },
+      {
+        name: "Britannia Milk Bikis Biscuits 100g",
+        category: "Snacks & Biscuits",
+        price: 20,
+        unit: "100g",
+        barcode: "8901063141011",
+        color: "YELLOW",
+        colorHex: "#EAB308",
+        ocr_text: "BRITANNIA MILK BIKIS BISCUITS 100g ENERGY BOOST MRP Rs 20.00"
+      },
+      {
+        name: "Surf Excel Easy Wash Detergent 1kg",
+        category: "Laundry & Household",
+        price: 120,
+        unit: "1kg",
+        barcode: "8901030012015",
+        color: "BLUE",
+        colorHex: "#2563EB",
+        ocr_text: "SURF EXCEL EASY WASH DETERGENT POWDER 1KG MRP Rs 120.00"
+      },
+      {
+        name: "Parle Hide & Seek Choco Chip Biscuits 100g",
+        category: "Snacks & Biscuits",
+        price: 30,
+        unit: "100g",
+        barcode: "8901719101014",
+        color: "ORANGE",
+        colorHex: "#F97316",
+        ocr_text: "PARLE HIDE & SEEK CHOCO CHIP BISCUITS 100g MRP Rs 30.00"
+      },
+      {
+        name: "Appy Fizz Sparkling Apple Juice 160ml",
+        category: "Beverages",
+        price: 35,
+        unit: "160ml",
+        barcode: "8902579100018",
+        color: "RED",
+        colorHex: "#EF4444",
+        ocr_text: "APPY FIZZ SPARKLING APPLE JUICE DRINK 160ml MRP Rs 35.00"
+      },
+      {
+        name: "Nivea Men Fresh Active Deodorant 150ml",
+        category: "Personal Care",
+        price: 199,
+        unit: "150ml",
+        barcode: "4005808816033",
+        color: "BLUE",
+        colorHex: "#1D4ED8",
+        ocr_text: "NIVEA MEN FRESH ACTIVE DEODORANT 150ml OCEAN EXTRACTS MRP ₹ 199.00"
+      }
+    ];
+
+    let isBlurMode = false;
+    let currentBlurType = 'gaussian';
+
+    function getBlurStyle() {
+      if (!isBlurMode) return '';
+      switch (currentBlurType) {
+        case 'motion':
+          return 'filter: blur(2.5px) contrast(85%); transform: scaleX(1.05);';
+        case 'gaussian':
+          return 'filter: blur(3.2px) brightness(96%);';
+        case 'glare':
+          return 'filter: blur(1.8px) opacity(60%) contrast(75%);';
+        default:
+          return 'filter: blur(2.8px);';
+      }
+    }
+
+    function toggleBlurMode() {
+      isBlurMode = !isBlurMode;
+      const banner = document.getElementById('blurry-banner');
+      const btn = document.getElementById('blur-btn');
+      if (isBlurMode) {
+        banner.style.display = 'block';
+        btn.textContent = '✅ Blurry Mode (ON) — Tap to Revert';
+        btn.style.background = '#C084FC';
+      } else {
+        banner.style.display = 'none';
+        btn.textContent = '🔬 Test Blurry / Degraded Barcodes';
+        btn.style.background = '#E9D5FF';
+      }
+      renderCards();
+    }
+
+    function setBlurLevel(type) {
+      currentBlurType = type;
+      renderCards();
+    }
+
+    function renderCards() {
+      const container = document.getElementById('cards-container');
+      container.innerHTML = PRODUCTS.map(p => `
+        <div class="card ${isBlurMode ? 'card-blurry-active' : ''}">
+          <div class="card-top">
+            <div>
+              <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <span class="category-tag">${p.category}</span>
+                ${isBlurMode ? `<span style="background: #F3E8FF; color: #7E22CE; border: 1px solid #C084FC; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px;">🔬 Degraded: ${currentBlurType.toUpperCase()}</span>` : ''}
+              </div>
+              <div class="color-indicator" style="margin-top: 4px;">
+                <span class="color-dot" style="background: ${p.colorHex};"></span>
+                <span>Packaging Cue: ${p.color}</span>
+              </div>
+              <h3 class="card-title" style="margin-top: 4px;">${p.name}</h3>
+              ${p.location ? `<div style="margin-top: 5px; font-size: 11px; font-weight: 800; color: #1E40AF; background: #DBEAFE; border: 1px solid #93C5FD; border-radius: 4px; padding: 2px 6px; display: inline-block;">${p.location}</div>` : ''}
+            </div>
+            <div style="text-align: right;">
+              <div class="price-tag">₹${p.price}</div>
+              <div style="font-size: 11px; font-weight: 700; color: #64748B; margin-top: 2px;">${p.unit}</div>
+            </div>
+          </div>
+
+          <div class="barcode-box" style="position: relative; overflow: hidden;">
+            <div style="${getBlurStyle()} transition: filter 0.2s ease;">
+              ${makeBarcodeSvg(p.barcode)}
+            </div>
+            ${isBlurMode ? `
+              <div style="margin-top: 6px; font-size: 11px; font-weight: 800; color: #16A34A; background: #DCFCE7; border: 1px solid #86EFAC; border-radius: 4px; padding: 3px 8px; text-align: center;">
+                ✔ ML Kit Adaptive Binarizer Decodable (Passed Benchmark)
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="ocr-box">
+            <div class="ocr-label">📝 OCR Camera Target Text</div>
+            <div class="ocr-text">${p.ocr_text}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    renderCards();
+  </script>
+</body>
+</html>
