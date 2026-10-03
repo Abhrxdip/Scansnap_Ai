@@ -13,9 +13,11 @@ export default function App() {
   const getInitialTab = () => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '').toLowerCase();
-      if (['loss-prevention', 'prevention', 'shrink'].includes(hash)) return 'loss-prevention';
-      if (['ai-studio', 'vision'].includes(hash)) return 'ai-studio';
-      if (['inventory', 'bills', 'offers', 'settings'].includes(hash)) return hash;
+      const path = window.location.pathname.replace(/^\//, '').toLowerCase();
+      const route = hash || path;
+      if (['loss-prevention', 'prevention', 'shrink'].includes(route)) return 'loss-prevention';
+      if (['ai-studio', 'vision'].includes(route)) return 'ai-studio';
+      if (['inventory', 'bills', 'offers', 'settings'].includes(route)) return route;
     }
     return 'dashboard';
   };
@@ -27,20 +29,26 @@ export default function App() {
   const setActiveTab = (tab) => {
     setActiveTabState(tab);
     if (typeof window !== 'undefined') {
-      window.location.hash = tab;
+      window.history.pushState(null, '', `/${tab}`);
     }
   };
 
   useEffect(() => {
-    const handleHashChange = () => {
+    const handleLocationChange = () => {
       const hash = window.location.hash.replace('#', '').toLowerCase();
-      if (['loss-prevention', 'prevention', 'shrink'].includes(hash)) setActiveTabState('loss-prevention');
-      else if (['dashboard', 'inventory', 'bills', 'offers', 'ai-studio', 'settings'].includes(hash)) {
-        setActiveTabState(hash);
+      const path = window.location.pathname.replace(/^\//, '').toLowerCase();
+      const route = hash || path;
+      if (['loss-prevention', 'prevention', 'shrink'].includes(route)) setActiveTabState('loss-prevention');
+      else if (['dashboard', 'inventory', 'bills', 'offers', 'ai-studio', 'settings'].includes(route)) {
+        setActiveTabState(route);
       }
     };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
   }, []);
 
   // Tab configurations
