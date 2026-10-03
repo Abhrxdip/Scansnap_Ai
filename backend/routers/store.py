@@ -53,6 +53,10 @@ def update_store_profile(
     profile.phone = body.phone
     profile.gst = body.gst
     profile.upi = body.upi
+    if body.latitude is not None:
+        profile.latitude = body.latitude
+    if body.longitude is not None:
+        profile.longitude = body.longitude
 
     db.commit()
     db.refresh(profile)

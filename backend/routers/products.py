@@ -196,6 +196,98 @@ def get_product(
         raise HTTPException(status_code=404, detail="Product not found")
     return product
 
+import math
+from datetime import datetime
+
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371.0 # Earth radius in kilometers
+    dLat = math.radians(lat2 - lat1)
+    dLon = math.radians(lon2 - lon1)
+    lat1 = math.radians(lat1)
+    lat2 = math.radians(lat2)
+
+    a = math.sin(dLat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dLon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
+def get_time_ago_str(updated_at: datetime) -> str:
+    if not updated_at:
+        return "Unknown"
+    delta = datetime.utcnow() - updated_at
+    if delta.days > 0:
+        return f"{delta.days} days ago"
+    elif delta.seconds > 3600:
+        return f"{delta.seconds // 3600} hours ago"
+    elif delta.seconds > 60:
+        return f"{delta.seconds // 60} minutes ago"
+    return "Just now"
+
+@router.get("/{product_id}/nearby", response_model=schemas.ProductNearbyResponse)
+def get_nearby_products(
+    product_id: str,
+    user_id: CurrentUser,
+    db: Session = Depends(get_db)
+):
+    # 1. Get current store product
+    product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found in your store")
+        
+    # 2. Get current store location
+    current_store = db.query(models.StoreProfile).filter(models.StoreProfile.user_id == user_id).first()
+    curr_lat = current_store.latitude if current_store else None
+    curr_lon = current_store.longitude if current_store else None
+    
+    # 3. Match other products (Barcode prioritized, else Name)
+    query = db.query(models.Product, models.StoreProfile).join(
+        models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
+    ).filter(models.Product.user_id != user_id)
+    
+    if product.barcode:
+        query = query.filter(models.Product.barcode == product.barcode)
+    else:
+        query = query.filter(models.Product.name == product.name)
+        
+    alternatives = query.all()
+    
+    # 4. Format and calculate distances
+    results = []
+    for p, store in alternatives:
+        dist = None
+        if curr_lat is not None and curr_lon is not None and store.latitude is not None and store.longitude is not None:
+            dist = round(haversine(curr_lat, curr_lon, store.latitude, store.longitude), 1)
+            
+        results.append({
+            "store_id": store.user_id,
+            "store_name": store.name or "Unknown Store",
+            "address": store.address or "",
+            "available": p.stock > 0,
+            "price": p.price,
+            "distance_km": dist,
+            "last_updated": get_time_ago_str(p.updated_at)
+        })
+        
+    # 5. Sort: Available first, then distance (if possible), then price
+    def sort_key(item):
+        return (
+            0 if item["available"] else 1,
+            item["distance_km"] if item["distance_km"] is not None else float('inf'),
+            item["price"]
+        )
+        
+    results.sort(key=sort_key)
+    
+    # Limit to top 10
+    results = results[:10]
+    
+    return schemas.ProductNearbyResponse(
+        product=product,
+        alternatives=results
+    )
 
 @router.put("/{product_id}", response_model=schemas.ProductResponse)
 def update_product(

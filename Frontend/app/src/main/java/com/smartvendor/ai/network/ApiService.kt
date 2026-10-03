@@ -85,4 +85,10 @@ interface ApiService {
         @Query("search") search: String? = null,
         @Query("limit") limit: Int = 20
     ): Response<List<MasterCatalogResponse>>
+
+    // ─── AI Inventory Assistant ────────────────────────────────────────────────
+
+    @POST("ai/chat")
+    suspend fun sendAiChat(@Body body: AiChatRequest): Response<AiChatResponse>
 }
+
