@@ -39,7 +39,8 @@ fun DashboardScreen(
     onNavigateToInventory: () -> Unit,
     onNavigateToReports: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToChat: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -50,6 +51,7 @@ fun DashboardScreen(
                 storeName = uiState.storeName,
                 urgentAlertCount = uiState.urgentStockAlerts.size,
                 onNotificationClick = { viewModel.toggleNotificationDialog(true) },
+                onChatClick = onNavigateToChat,
                 onProfileClick = { onNavigateToSettings() }
             )
         },
@@ -78,6 +80,77 @@ fun DashboardScreen(
                         }
                     )
                 }
+
+                // AI Store Copilot & Stock Finder Card
+                item {
+                    NeuCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        backgroundColor = Color(0xFFF0FDF4),
+                        borderColor = NeuBlack,
+                        shadowOffset = 4.dp,
+                        cornerRadius = 14.dp,
+                        onClick = onNavigateToChat
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(NeuGreen)
+                                        .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = "🤖", fontSize = 22.sp)
+                                }
+                                Column {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "Store Inventory Copilot",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 15.sp,
+                                            color = NeuBlack
+                                        )
+                                        NeuBadge(
+                                            text = "AI CHAT",
+                                            backgroundColor = NeuYellow,
+                                            textColor = NeuBlack
+                                        )
+                                    }
+                                    Text(
+                                        text = "Query stock, prices & find in nearby stores",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = NeuGray,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ArrowForward,
+                                contentDescription = "Open Chat",
+                                tint = NeuBlack,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
 
                 // Section Title
                 item {
@@ -190,6 +263,7 @@ fun DashboardTopBar(
     storeName: String,
     urgentAlertCount: Int,
     onNotificationClick: () -> Unit,
+    onChatClick: () -> Unit = {},
     onProfileClick: () -> Unit
 ) {
     Box(
@@ -234,6 +308,20 @@ fun DashboardTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // AI Copilot Chat Button
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .neuShadow(offsetX = 2.dp, offsetY = 2.dp, cornerRadius = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(NeuGreen)
+                        .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp))
+                        .clickable { onChatClick() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "🤖", fontSize = 18.sp)
+                }
+
                 // Notification Button with Solid Shadow
                 Box(
                     modifier = Modifier
@@ -303,6 +391,7 @@ fun DashboardTopBar(
         }
     }
 }
+
 
 @Composable
 fun NewBillCard(

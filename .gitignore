@@ -54,4 +54,5 @@ serviceAccountKey.json
 # Sensitive & Backup Files
 Backup-codes-*.txt
 *.db
-make_commits.ps1
+*.log
+make_commits.ps1

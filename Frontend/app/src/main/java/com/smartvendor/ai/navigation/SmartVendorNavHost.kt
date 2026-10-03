@@ -54,9 +54,13 @@ fun SmartVendorNavHost(
                 },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
+                },
+                onNavigateToChat = {
+                    navController.navigate(Screen.AiChat.route)
                 }
             )
         }
+
 
         composable(
             route = Screen.Scan.route,
@@ -151,5 +155,12 @@ fun SmartVendorNavHost(
                 }
             )
         }
+
+        composable(Screen.AiChat.route) {
+            AiChatScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
     }
 }
+

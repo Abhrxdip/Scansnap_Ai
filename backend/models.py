@@ -64,6 +64,8 @@ class StoreProfile(Base):
     phone = Column(String, nullable=False, default="")
     gst = Column(String, nullable=False, default="")
     upi = Column(String, nullable=False, default="")
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

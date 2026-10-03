@@ -11,6 +11,8 @@ class StoreProfileCreate(BaseModel):
     phone: str = ""
     gst: str = ""
     upi: str = ""
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class StoreProfileResponse(BaseModel):
@@ -20,6 +22,8 @@ class StoreProfileResponse(BaseModel):
     phone: str
     gst: str
     upi: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     updated_at: datetime
 
     model_config = {"from_attributes": True}
@@ -65,6 +69,21 @@ class ProductResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class NearbyStoreResponse(BaseModel):
+    store_id: str
+    store_name: str
+    address: str
+    available: bool
+    price: float
+    distance_km: Optional[float] = None
+    last_updated: str
+
+
+class ProductNearbyResponse(BaseModel):
+    product: ProductResponse
+    alternatives: List[NearbyStoreResponse]
 
 
 class MasterCatalogResponse(BaseModel):
@@ -164,4 +183,12 @@ class AnalyticsSummary(BaseModel):
     market_trends: List[MarketTrendInsight] = []
 
 
+# ─── AI Schemas ────────────────────────────────────────────────────────────────
 
+class AIChatRequest(BaseModel):
+    message: str
+
+class AIChatResponse(BaseModel):
+    success: bool
+    response: Optional[str] = None
+    error: Optional[str] = None

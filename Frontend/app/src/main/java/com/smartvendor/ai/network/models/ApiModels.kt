@@ -150,3 +150,16 @@ data class AnalyticsSummaryResponse(
     @SerializedName("stock_recommendations") val stockRecommendations: List<StockRecommendationItemResponse> = emptyList(),
     @SerializedName("market_trends") val marketTrends: List<MarketTrendInsightResponse> = emptyList()
 )
+
+// ─── AI Chat ──────────────────────────────────────────────────────────────────
+
+data class AiChatRequest(
+    val message: String
+)
+
+data class AiChatResponse(
+    val success: Boolean = true,
+    val response: String? = null,
+    val error: String? = null
+)
+
