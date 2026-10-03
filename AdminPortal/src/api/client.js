@@ -32,6 +32,15 @@ export async function fetchProducts(search = '', category = '') {
   return res.json();
 }
 
+export async function syncRealtimeInventory() {
+  const res = await apiFetch('/products/sync-catalog', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error('Failed to sync catalog inventory');
+  return res.json();
+}
+
 export async function createProduct(productData) {
   const res = await apiFetch('/products', {
     method: 'POST',
