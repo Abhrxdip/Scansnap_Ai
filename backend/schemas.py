@@ -206,11 +206,44 @@ class AnalyticsSummary(BaseModel):
 
 # ─── AI Schemas ────────────────────────────────────────────────────────────────
 
+class NearbyStoreProduct(BaseModel):
+    product_id: str
+    product_name: str
+    store_id: str
+    store_name: str
+    store_address: Optional[str] = ""
+    store_phone: Optional[str] = ""
+    price: float
+    stock: int
+    distance_km: Optional[float] = None
+    time_ago: str = ""
+
 class AIChatRequest(BaseModel):
     message: str
 
 class AIChatResponse(BaseModel):
     success: bool
     response: Optional[str] = None
+    nearby_options: Optional[List[NearbyStoreProduct]] = None
     error: Optional[str] = None
+
+class InterStoreOrderItem(BaseModel):
+    product_id: str
+    product_name: str
+    quantity: int
+    unit_price: float
+
+class InterStoreOrderRequest(BaseModel):
+    seller_store_id: str
+    seller_store_name: str
+    items: List[InterStoreOrderItem]
+    total_amount: float
+    delivery_note: Optional[str] = "Inter-store transfer request"
+
+class InterStoreOrderResponse(BaseModel):
+    order_id: str
+    status: str
+    seller_store_name: str
+    total_amount: float
+    message: str
 

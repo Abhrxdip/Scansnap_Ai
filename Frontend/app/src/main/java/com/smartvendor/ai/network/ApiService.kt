@@ -86,9 +86,11 @@ interface ApiService {
         @Query("limit") limit: Int = 20
     ): Response<List<MasterCatalogResponse>>
 
-    // ─── AI Inventory Assistant ────────────────────────────────────────────────
-
+    // ─── AI Inventory Assistant & Inter-Store Ordering ────────────────────────
     @POST("ai/chat")
     suspend fun sendAiChat(@Body body: AiChatRequest): Response<AiChatResponse>
+
+    @POST("ai/order")
+    suspend fun createInterStoreOrder(@Body body: InterStoreOrderRequest): Response<InterStoreOrderResponse>
 }
 

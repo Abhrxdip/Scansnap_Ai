@@ -129,6 +129,7 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
                         or_(*filters)
                     ).all()
         
+        nearby_options = []
         if not alternatives:
             response_lines.append(f"I couldn't find '{product_name}' in any nearby stores.")
         else:
@@ -151,6 +152,20 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
                 response_lines.append(
                     f"• {store_display_name}: ₹{res['product'].price} | {dist_str} | Updated {time_ago}"
                 )
+                nearby_options.append({
+                    "product_id": str(res["product"].id),
+                    "product_name": res["product"].name,
+                    "store_id": str(res["product"].user_id),
+                    "store_name": store_display_name,
+                    "store_address": res["store"].address if res["store"] else "",
+                    "store_phone": res["store"].phone if res["store"] else "",
+                    "price": float(res["product"].price),
+                    "stock": int(res["product"].stock),
+                    "distance_km": round(res["dist"], 1) if res["dist"] is not None else None,
+                    "time_ago": time_ago
+                })
+
+        return {"success": True, "response": "\n".join(response_lines), "nearby_options": nearby_options}
 
     elif intent in ["PRODUCT_AVAILABILITY", "PRODUCT_PRICE"]:
         if not product_name:

@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from auth import CurrentUser
-from schemas import AIChatRequest, AIChatResponse
+import uuid
+from schemas import (
+    AIChatRequest, AIChatResponse,
+    InterStoreOrderRequest, InterStoreOrderResponse
+)
 from database import get_db
 from sqlalchemy.orm import Session
 from services.inventory_chat_service import handle_chat_request
+import models
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
@@ -29,7 +34,37 @@ def ai_chat(
 
     return AIChatResponse(
         success=True,
-        response=result.get("response")
+        response=result.get("response"),
+        nearby_options=result.get("nearby_options")
+    )
+
+@router.post("/order", response_model=InterStoreOrderResponse)
+def create_inter_store_order(
+    order_req: InterStoreOrderRequest,
+    user_id: CurrentUser,
+    db: Session = Depends(get_db)
+):
+    if not order_req.items:
+        raise HTTPException(status_code=400, detail="Order must have at least one item")
+
+    order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
+
+    # Deduct or reserve stock from the partner store if product exists
+    for item in order_req.items:
+        product = db.query(models.Product).filter(
+            models.Product.id == item.product_id
+        ).first()
+        if product and product.stock >= item.quantity:
+            product.stock -= item.quantity
+    
+    db.commit()
+
+    return InterStoreOrderResponse(
+        order_id=order_id,
+        status="CONFIRMED",
+        seller_store_name=order_req.seller_store_name,
+        total_amount=order_req.total_amount,
+        message=f"Order #{order_id} successfully sent to {order_req.seller_store_name}! Delivery / pickup initiated."
     )
 
 @router.get("/seed")

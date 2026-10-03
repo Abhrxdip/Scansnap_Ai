@@ -151,7 +151,20 @@ data class AnalyticsSummaryResponse(
     @SerializedName("market_trends") val marketTrends: List<MarketTrendInsightResponse> = emptyList()
 )
 
-// ─── AI Chat ──────────────────────────────────────────────────────────────────
+// ─── AI Chat & Inter-Store Ordering ──────────────────────────────────────────
+
+data class NearbyStoreProduct(
+    @SerializedName("product_id") val productId: String,
+    @SerializedName("product_name") val productName: String,
+    @SerializedName("store_id") val storeId: String,
+    @SerializedName("store_name") val storeName: String,
+    @SerializedName("store_address") val storeAddress: String? = "",
+    @SerializedName("store_phone") val storePhone: String? = "",
+    val price: Double,
+    val stock: Int,
+    @SerializedName("distance_km") val distanceKm: Double? = null,
+    @SerializedName("time_ago") val timeAgo: String = ""
+)
 
 data class AiChatRequest(
     val message: String
@@ -160,6 +173,30 @@ data class AiChatRequest(
 data class AiChatResponse(
     val success: Boolean = true,
     val response: String? = null,
+    @SerializedName("nearby_options") val nearbyOptions: List<NearbyStoreProduct>? = null,
     val error: String? = null
+)
+
+data class InterStoreOrderItem(
+    @SerializedName("product_id") val productId: String,
+    @SerializedName("product_name") val productName: String,
+    val quantity: Int,
+    @SerializedName("unit_price") val unitPrice: Double
+)
+
+data class InterStoreOrderRequest(
+    @SerializedName("seller_store_id") val sellerStoreId: String,
+    @SerializedName("seller_store_name") val sellerStoreName: String,
+    val items: List<InterStoreOrderItem>,
+    @SerializedName("total_amount") val totalAmount: Double,
+    @SerializedName("delivery_note") val deliveryNote: String? = "Inter-store transfer request"
+)
+
+data class InterStoreOrderResponse(
+    @SerializedName("order_id") val orderId: String,
+    val status: String,
+    @SerializedName("seller_store_name") val sellerStoreName: String,
+    @SerializedName("total_amount") val totalAmount: Double,
+    val message: String
 )
 
