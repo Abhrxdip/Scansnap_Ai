@@ -41,6 +41,8 @@ export const CORE_BARCODE_PRODUCTS = [
   { name: 'Thums Up Charged Carbonated Beverage 250ml Can', barcode: '8901764012211', category: 'Beverages', price: 20, cost_price: 16, stock_quantity: 120, unit: '250ml', brand: 'Thums Up' },
   { name: 'Wild Stone Forest Spice Deodorant Soap 125g', barcode: '8904006304218', category: 'Personal Care', price: 70, cost_price: 54, stock_quantity: 90, unit: '125g', brand: 'Wild Stone' },
   { name: 'Nivea Men Fresh Active Deodorant 150ml', barcode: '4005808816033', category: 'Personal Care', price: 199, cost_price: 155, stock_quantity: 55, unit: '150ml', brand: 'Nivea' },
+  { name: 'Beardo Mariner Eau De Parfum 50ml', barcode: '8906084796773', category: 'Personal Care', price: 799, cost_price: 499, stock_quantity: 45, unit: '50ml', brand: 'Beardo' },
+  { name: 'Beardo Mariner Perfume 50ml (Alt SKU)', barcode: '8906084795998', category: 'Personal Care', price: 799, cost_price: 499, stock_quantity: 25, unit: '50ml', brand: 'Beardo' },
 
   // Instant Food & Noodles
   { name: 'Maggi 2-Minute Noodles 70g', barcode: '8901058852394', category: 'Instant Food', price: 14, cost_price: 11.5, stock_quantity: 0, unit: '70g', brand: 'Nestle' },

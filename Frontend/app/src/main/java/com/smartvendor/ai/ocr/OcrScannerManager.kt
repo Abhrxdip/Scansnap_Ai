@@ -60,7 +60,10 @@ class OcrScannerManager {
         "sprite" to PackagingColor.GREEN,
         "thums up" to PackagingColor.BLUE,
         "red label tea" to PackagingColor.RED,
-        "dettol soap" to PackagingColor.GREEN
+        "dettol soap" to PackagingColor.GREEN,
+        "beardo" to PackagingColor.GREEN,
+        "beardo mariner" to PackagingColor.GREEN,
+        "mariner" to PackagingColor.GREEN
     )
 
     private val fontAliasesMap = mapOf(
@@ -79,7 +82,8 @@ class OcrScannerManager {
         "goodday" to "good day", "good-day" to "good day",
         "kurkure" to "kurkure", "kur kure" to "kurkure",
         "dettol" to "dettol", "detol" to "dettol",
-        "colgate" to "colgate", "colgat" to "colgate"
+        "colgate" to "colgate", "colgat" to "colgate",
+        "beardo" to "beardo mariner", "beardo mariner" to "beardo mariner", "mariner" to "beardo mariner"
     )
 
     private val noiseWords = setOf(

@@ -638,5 +638,21 @@
     "expected_price": null,
     "expected_unit": null,
     "notes": "Soya Sticks vs Snickers/Surf Excel"
+  },
+  {
+    "test_id": "TC-165",
+    "raw_ocr": "BEARDO MARINER EAU DE PARFUM 50ml MRP Rs 799.00",
+    "expected_id": "beardo",
+    "expected_price": 799.0,
+    "expected_unit": "50ML",
+    "notes": "Beardo Mariner authentic packaging OCR test"
+  },
+  {
+    "test_id": "TC-166",
+    "raw_ocr": "BEARDO Mariner Perfume 50 ml",
+    "expected_id": "beardo",
+    "expected_price": null,
+    "expected_unit": "50ML",
+    "notes": "Beardo Mariner without price"
   }
 ]

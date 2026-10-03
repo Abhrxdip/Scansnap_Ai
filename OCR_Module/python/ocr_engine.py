@@ -123,6 +123,16 @@ MASTER_CATALOG = [
         "typical_units": ["125g", "150ml"]
     },
     {
+        "id": "beardo",
+        "name": "Beardo Mariner Eau De Parfum 50ml",
+        "category": "Personal Care & Hygiene",
+        "suggested_price": 799.0,
+        "barcode": "8906084796773",
+        "aliases": ["beardo", "mariner", "beardo mariner", "eau de parfum", "beardo perfume", "mariner eau de parfum"],
+        "color": "GREEN",
+        "typical_units": ["50ml", "100ml"]
+    },
+    {
         "id": "bourbon_biscuit",
         "name": "Britannia Bourbon Chocolate Biscuits",
         "category": "Snacks & Biscuits",
@@ -234,7 +244,8 @@ NOISE_WORDS = {
     "saver", "offer", "inside", "new", "improved", "taste", "delicious",
     "crunchy", "crispy", "snack", "tasty", "yummy", "original", "formula",
     "imported", "distributed", "packed", "contains", "added", "flavour",
-    "artificial", "natural", "identical", "flavouring", "substances", "preservative"
+    "artificial", "natural", "identical", "flavouring", "substances", "preservative",
+    "rs", "inr"
 }
 
 ANTI_CONFUSION_PAIRS = [
@@ -258,7 +269,9 @@ GENERIC_TOKENS = {
     "biscuits", "chocolate", "masala", "noodles", "juice", "beverage", 
     "can", "original", "charged", "bar", "munch", "sparkling", "apple",
     "snack", "drink", "water", "chips", "crisps", "2-minute",
-    "britannia", "cadbury", "nestle", "parle", "amul", "haldiram"
+    "britannia", "cadbury", "nestle", "parle", "amul", "haldiram",
+    "eau", "de", "parfum", "edp", "perfume",
+    "ml", "g", "gm", "kg", "ltr", "litre", "pack", "pcs"
 }
 
 
@@ -315,7 +328,7 @@ class OcrPipeline:
         for t in raw_tokens:
             if not t or len(t) < 2:
                 continue
-            if t in NOISE_WORDS:
+            if t in NOISE_WORDS or t.isdigit():
                 continue
             cleaned.append(t)
 

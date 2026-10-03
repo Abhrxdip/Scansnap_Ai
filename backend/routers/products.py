@@ -86,7 +86,9 @@ SAMPLE_PRODUCTS = [
     ("Nescafe Classic Instant Coffee 50g Jar", "Beverages", 175.0, 40, "8901058852239"),
     ("Colgate MaxFresh Peppermint Ice Toothpaste 150g", "Personal Care", 98.0, 60, "8901314010528"),
     ("Dettol Original Antiseptic Liquid 125ml", "Personal Care", 86.0, 55, "8901396388414"),
-    ("Ariel Matic Front Load Detergent Powder 1kg", "Household", 230.0, 40, "4902430894210")
+    ("Ariel Matic Front Load Detergent Powder 1kg", "Household", 230.0, 40, "4902430894210"),
+    ("Beardo Mariner Eau De Parfum 50ml", "Personal Care", 799.0, 45, "8906084796773"),
+    ("Beardo Mariner Perfume 50ml (Alt SKU)", "Personal Care", 799.0, 25, "8906084795998")
 ]
 
 BARCODE_CATALOG_SKUS = SAMPLE_PRODUCTS

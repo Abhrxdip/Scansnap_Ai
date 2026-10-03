@@ -185,6 +185,8 @@ def seed(db=None):
                 {"name": "Brooke Bond Red Label Tea 250g", "barcode": "8901262010122", "category": "Beverages", "price": 140.0, "stock": 40},
 
                 # Personal Care & Hygiene
+                {"name": "Beardo Mariner Eau De Parfum 50ml", "barcode": "8906084796773", "category": "Personal Care", "price": 799.0, "stock": 45},
+                {"name": "Beardo Mariner Perfume 50ml (Alt SKU)", "barcode": "8906084795998", "category": "Personal Care", "price": 799.0, "stock": 25},
                 {"name": "Dettol Original Germ Protection Bathing Soap 75g", "barcode": "8901262010114", "category": "Personal Care", "price": 38.0, "stock": 70},
                 {"name": "Colgate Strong Teeth Anticavity Toothpaste 150g", "barcode": "8901262010180", "category": "Personal Care", "price": 65.0, "stock": 60},
                 {"name": "Pepsodent Expert Protection Toothpaste 140g", "barcode": "8901262010181", "category": "Personal Care", "price": 55.0, "stock": 50},

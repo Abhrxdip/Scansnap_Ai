@@ -141,3 +141,13 @@ export async function calculateCartOffers(items, applyFestival = true, applyComb
   if (!res.ok) throw new Error('Failed to calculate offers');
   return res.json();
 }
+
+export async function seedDemoBills() {
+  const res = await apiFetch('/bills/seed-demo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error('Failed to seed demo bills');
+  return res.json();
+}
+

@@ -14,6 +14,7 @@ from PIL import Image
 
 CATEGORY_LABEL_MAP = {
     "Amul_Ice_Cream": "amul_ice_cream",
+    "Beardo": "beardo",
     "Cake": "cake",
     "CeraVe": "cerave",
     "HnS_Shampoo": "hns_shampoo",

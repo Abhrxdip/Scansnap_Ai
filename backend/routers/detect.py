@@ -73,7 +73,9 @@ FRIENDLY_NAMES = {
     "hide_and_seek": "Parle Hide & Seek Choco Chip Biscuits",
     "oreo": "Cadbury Oreo Original Biscuits",
     "appe_fizz": "Appy Fizz Sparkling Apple Juice",
-    "jim_jam": "Britannia Treat Jim Jam Biscuits"
+    "jim_jam": "Britannia Treat Jim Jam Biscuits",
+    "beardo": "Beardo Mariner Eau De Parfum 50ml",
+    "beardo_mariner": "Beardo Mariner Eau De Parfum 50ml"
 }
 
 
@@ -115,7 +117,9 @@ def _match_db_product(label: str, user_id: str) -> Optional[dict]:
                 "hide_and_seek": ["Hide", "Seek"],
                 "oreo": ["Oreo"],
                 "appe_fizz": ["Appy"],
-                "jim_jam": ["Jim", "Jam"]
+                "jim_jam": ["Jim", "Jam"],
+                "beardo": ["Beardo", "Mariner"],
+                "beardo_mariner": ["Beardo", "Mariner"]
             }
             kws = keywords_map.get(normalized_label, [normalized_name_str])
 
@@ -208,8 +212,8 @@ def _verify_aspect_ratio(box: list[float], label: str) -> Optional[bool]:
         lbl = label.lower().strip()
 
         # Tall cylinders & bottles (must be vertically oriented)
-        if lbl in ("cerave", "hns_shampoo", "nivea_deodorant"):
-            if ratio < 0.75:  # Flat horizontal shape cannot physically be these bottles
+        if lbl in ("cerave", "hns_shampoo", "nivea_deodorant", "beardo", "beardo_mariner"):
+            if ratio < 0.70:  # Flat horizontal shape cannot physically be these bottles
                 return False
         elif lbl == "thums_up":
             if ratio < 0.70:  # Beverage can cannot be extremely flat
@@ -326,8 +330,8 @@ def _verify_color_signature(crop_img: Image.Image, label: str, conf: float = 0.5
             # Thums Up: High-contrast red and deep navy blue. Rejects bright yellow/green dominance.
             if yellow_pct > 35.0 or green_pct > 30.0:
                 return False
-        elif lbl == "wild_stone":
-            # Wild Stone product line includes Code Platinum (charcoal/silver), Forest Spice Soap (emerald green/black).
+        elif lbl in ("wild_stone", "beardo", "beardo_mariner"):
+            # Wild Stone & Beardo: deep forest green / sea-green teal with black/silver accents.
             if purple_pct > 40.0:
                 return False
         else:
@@ -497,28 +501,31 @@ def _run_inference(img: Image.Image, user_id: str, conf_threshold: float = 0.25)
             product_match=prod_match
         ))
 
-    # If YOLO produced no detections, apply fast visual package classifier
-    if not detections:
+    # If YOLO produced no detections or only weak detections (<0.60), apply fast visual package classifier
+    if not detections or (detections and detections[0].confidence < 0.60):
         try:
             from retail_classifier import classify_product_image
             match_res = classify_product_image(rgb_img)
             if match_res:
                 lbl, conf, bbox = match_res
-                x1 = int(bbox[0] * w)
-                y1 = int(bbox[1] * h)
-                x2 = int(bbox[2] * w)
-                y2 = int(bbox[3] * h)
-                prod_match = _match_db_product(lbl, user_id)
-                class_display_name = FRIENDLY_NAMES.get(lbl, lbl.replace("_", " ").title())
-                detections.append(Detection(
-                    label=lbl,
-                    class_name=class_display_name,
-                    confidence=conf,
-                    bbox=[bbox[0], bbox[1], bbox[2], bbox[3]],
-                    box=[x1, y1, x2, y2],
-                    product_match=prod_match
-                ))
-                logger.info(f"🎯 [Retail Classifier Match] Found {lbl} ({conf*100:.1f}%)")
+                if not detections or conf > detections[0].confidence:
+                    x1 = int(bbox[0] * w)
+                    y1 = int(bbox[1] * h)
+                    x2 = int(bbox[2] * w)
+                    y2 = int(bbox[3] * h)
+                    prod_match = _match_db_product(lbl, user_id)
+                    class_display_name = FRIENDLY_NAMES.get(lbl, lbl.replace("_", " ").title())
+                    if detections and conf > 0.70:
+                        detections.clear()
+                    detections.append(Detection(
+                        label=lbl,
+                        class_name=class_display_name,
+                        confidence=conf,
+                        bbox=[bbox[0], bbox[1], bbox[2], bbox[3]],
+                        box=[x1, y1, x2, y2],
+                        product_match=prod_match
+                    ))
+                    logger.info(f"🎯 [Retail Classifier Match] Found {lbl} ({conf*100:.1f}%)")
         except Exception as e:
             logger.warning(f"Retail classifier fallback error: {e}")
 
