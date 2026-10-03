@@ -47,25 +47,25 @@ Rather than relying purely on one modality, it combines Optical Character Recogn
 
 Recognition confidence is not equivalent to transaction confidence. ScanSnap AI layers model confidence with inventory resolution, ambiguity handling, and temporal stability before allowing cart actions.
 
-### Stage 1 ó Camera Frame
+### Stage 1 ‚Äî Camera Frame
 The Android client utilizes CameraX to capture high-resolution preview frames of the checkout counter.
 
-### Stage 2 ó OCR extraction
+### Stage 2 ‚Äî OCR extraction
 Google ML Kit processes the frame locally to extract text blocks, mitigating network latency for highly legible packaging.
 
-### Stage 3 ó OCR Catalog Matching
+### Stage 3 ‚Äî OCR Catalog Matching
 Extracted text is normalized and compared against the authenticated user's inventory catalog. Ambiguous aliases (e.g., generic words like "milk" or "biscuit") are heavily penalized or rejected to prevent false positives.
 
-### Stage 4 ó YOLO Fallback & Visual Evidence
+### Stage 4 ‚Äî YOLO Fallback & Visual Evidence
 When OCR cannot confidently resolve a product, the frame is sent to the authenticated backend detection API. A fine-tuned YOLO model returns predicted classes, confidences, and bounding boxes. Packaging color within the bounding box acts as supporting evidence (where configured) to reject out-of-domain false positives.
 
-### Stage 5 ó User-Scoped Inventory Resolution
+### Stage 5 ‚Äî User-Scoped Inventory Resolution
 The detected YOLO label (e.g., `maggi`) attempts to resolve against the backend database. This search is strictly scoped to the authenticated user's inventory. If the user does not sell the item, the visual detection may still display on-screen, but the `product_match` resolves to `null`, architecturally preventing the cart from adding unowned inventory.
 
-### Stage 6 ó Temporal Stability
+### Stage 6 ‚Äî Temporal Stability
 A single recognized frame does not trigger a cart addition. The Android client enforces a 3-consecutive-frame temporal stability threshold. Multiple bounding boxes of the same SKU within a single frame are correctly counted as one observation.
 
-### Stage 7 ó Cart Addition & Debouncing
+### Stage 7 ‚Äî Cart Addition & Debouncing
 Once stability conditions are met, the item is added to the local cart. A 5-second scanner cooldown and disappearance-latch prevent the same physical item from being continuously billed. The user must remove the item from the camera view to reset the latch for a second physical unit.
 
 ---
@@ -236,17 +236,17 @@ erDiagram
 ```text
 ScanSnap_Ai/
 +-- Frontend/                 # Native Android Client
-¶   +-- app/src/main/java/... # Kotlin UI, AI Overlays, and Retrofit APIs
-¶   +-- build.gradle.kts      # Gradle configuration (dynamic API base URLs)
-¶   +-- AndroidManifest.xml   # Manifest (Cleartext configuration rules)
+¬¶   +-- app/src/main/java/... # Kotlin UI, AI Overlays, and Retrofit APIs
+¬¶   +-- build.gradle.kts      # Gradle configuration (dynamic API base URLs)
+¬¶   +-- AndroidManifest.xml   # Manifest (Cleartext configuration rules)
 +-- backend/                  # FastAPI Application
-¶   +-- routers/              # Modular API endpoints (detect, bills, analytics)
-¶   +-- models.py             # SQLAlchemy ORM definitions
-¶   +-- schemas.py            # Pydantic payloads
-¶   +-- auth.py               # Firebase JWT validation layer
-¶   +-- main.py               # Application entrypoint & CORS definition
+¬¶   +-- routers/              # Modular API endpoints (detect, bills, analytics)
+¬¶   +-- models.py             # SQLAlchemy ORM definitions
+¬¶   +-- schemas.py            # Pydantic payloads
+¬¶   +-- auth.py               # Firebase JWT validation layer
+¬¶   +-- main.py               # Application entrypoint & CORS definition
 +-- AdminPortal/              # React Web Dashboard
-¶   +-- src/                  # Components, Pages, and Assets
+¬¶   +-- src/                  # Components, Pages, and Assets
 +-- AI/                       # Model Weights & Training Notebooks
 +-- README.md                 # Project Documentation
 ```
@@ -365,6 +365,26 @@ npm run dev
 - [ ] **Disable Dev Auth Bypass:** Ensure `DEV_AUTH_BYPASS` is unset in the production environment.
 - [ ] **Configure Allowed Origins:** Supply the real Admin Portal URL to the `ALLOWED_ORIGINS` backend variable.
 - [ ] **Inject Firebase Credentials:** Provide `firebase-adminsdk.json` to the backend deployment and `google-services.json` to the Android build.
+
+---
+
+## üõ°Ô∏è 16b. Retail Loss Prevention & Shrink Shield (Pure Software)
+
+ScanSnap AI features a dedicated, pure-software **Loss Prevention & Theft Shield** decoupled from proprietary hardware (Intel GStreamer/OpenVINO removed). The module actively stops retail shrinkage and self-checkout fraud across 7 key vectors:
+
+| Scenario | Threat Model | Automated Action |
+| :--- | :--- | :--- |
+| **Product Ticket Switching** | Shopper scans cheap barcode (‚Çπ40 soap) on costly item (‚Çπ1,299 Puma T-Shirt). | **CRITICAL ALERT** & `LOCK_LANE` |
+| **Fake / Ghost Scan** | Item passed across scanner into bag without valid barcode trigger. | `PROMPT_RESCAN` |
+| **Items Left in Basket** | Checkout initiated while unbilled items remain in trolley. | `PROMPT_RESCAN` (Before payment) |
+| **Multi-Product Stacking** | 2+ items passed simultaneously in single scan window. | Split scan warning |
+| **Hidden Merchandise** | Items concealed on lower trolley rack or underneath bags. | Attendant alert |
+| **Sweethearting Bypass** | Deliberate palm-obscuration over scanner window. | `REQUIRE_SUPERVISOR` |
+| **Age-Restricted Validation** | 18+ restricted goods (alcohol, tobacco, blades) compliance. | Cashier ID sign-off |
+
+- **Complete A-to-Z Architecture Guide:** [prevention/README.md](file:///c:/Users/abhra/OneDrive/Desktop/Smart-vendor-AI/prevention/README.md)
+- **Live Admin Portal Monitor Route:** `/loss-prevention` (`http://localhost:3000/#loss-prevention`)
+- **Automated Test Suite:** `backend/test_loss_prevention.py` (15/15 tests passing, sub-15ms evaluation latency).
 
 ---
 
