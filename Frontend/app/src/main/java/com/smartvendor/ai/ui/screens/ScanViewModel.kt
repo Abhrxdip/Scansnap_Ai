@@ -75,9 +75,10 @@ class ScanViewModel(
     private var lastDetectedTimestamp: Long = 0L
     private val debounceWindowMs = 3000L
 
-    private val dismissedProductIds = ConcurrentHashMap.newKeySet<String>()
+    private val dismissedTimestampMap = ConcurrentHashMap<String, Long>()
+    private val dismissedCooldownMs = 3500L
     private val recentlyAddedTimestampMap = ConcurrentHashMap<String, Long>()
-    private val addedCooldownMs = 5000L
+    private val addedCooldownMs = 3000L
     private var appContext: Context? = null
 
     fun initialize(context: Context, billId: String) {
@@ -148,7 +149,7 @@ class ScanViewModel(
                     recentlyAddedTimestampMap.keys.retainAll { key ->
                         activeProductIds.contains(key) || activeNames.contains(key.lowercase())
                     }
-                    dismissedProductIds.retainAll { key ->
+                    dismissedTimestampMap.keys.retainAll { key ->
                         activeProductIds.contains(key) || activeNames.contains(key.lowercase())
                     }
 
@@ -157,14 +158,14 @@ class ScanViewModel(
                     val newBill = Bill(billId = validId, items = emptyList(), subtotal = 0.0, gst = 0.0, grandTotal = 0.0)
                     salesRepository.saveBill(newBill)
                     recentlyAddedTimestampMap.clear()
-                    dismissedProductIds.clear()
+                    dismissedTimestampMap.clear()
                     _uiState.update { it.copy(currentBill = newBill) }
                 }
             }.onFailure {
                 val newBill = Bill(billId = validId, items = emptyList(), subtotal = 0.0, gst = 0.0, grandTotal = 0.0)
                 salesRepository.saveBill(newBill)
                 recentlyAddedTimestampMap.clear()
-                dismissedProductIds.clear()
+                dismissedTimestampMap.clear()
                 _uiState.update { it.copy(currentBill = newBill) }
             }
         }
@@ -214,18 +215,30 @@ class ScanViewModel(
     }
 
     private var lastFrameProcessTime: Long = 0L
+    private var frameProcessingStartTime: Long = 0L
     private val catalogSearchCache = java.util.concurrent.ConcurrentHashMap<String, List<com.smartvendor.ai.network.models.MasterCatalogResponse>>()
 
     fun processFrame(imageProxy: ImageProxy) {
         val now = System.currentTimeMillis()
-        if (_uiState.value.detectedProduct != null ||
-            _uiState.value.detectedProductsList.isNotEmpty() ||
-            _uiState.value.isProcessingFrame ||
-            (now - lastFrameProcessTime < 180L)) {
+
+        // 1. Safety Watchdog: Reset stuck frame processing after 1500ms
+        if (_uiState.value.isProcessingFrame && (now - frameProcessingStartTime > 1500L)) {
+            _uiState.update { it.copy(isProcessingFrame = false) }
+        }
+
+        // 2. If review card is actively showing AND autoAdd is disabled, pause frame intake
+        if (!_uiState.value.autoAddEnabled && _uiState.value.detectedProduct != null) {
+            imageProxy.close()
+            return
+        }
+
+        // 3. Fast throttle (~11 FPS, 90ms between frames)
+        if (_uiState.value.isProcessingFrame || (now - lastFrameProcessTime < 90L)) {
             imageProxy.close()
             return
         }
         lastFrameProcessTime = now
+        frameProcessingStartTime = now
 
         viewModelScope.launch {
             _uiState.update { it.copy(isProcessingFrame = true) }
@@ -249,81 +262,76 @@ class ScanViewModel(
                 return@launch
             }
 
-            // 1. Dedicated Barcode Scanner Mode (Direct Fast Bitmap Analysis)
-            if (_uiState.value.isBarcodeActive) {
+            try {
+                // ── ULTRA-FAST BARCODE CHECK ON EVERY FRAME (15ms On-Device ML Kit) ──
+                // Barcode is the primary ground truth. Detect it immediately across all modes!
                 barcodeScanner.scanBitmap(
                     bitmap = bitmap,
                     onSuccess = { barcode ->
                         handleBarcodeDetected(barcode, bitmap)
                     },
                     onNotFound = {
-                        _uiState.update { it.copy(isProcessingFrame = false) }
+                        handleVisionAfterNoBarcode(bitmap)
                     },
                     onError = {
-                        _uiState.update { it.copy(isProcessingFrame = false) }
+                        handleVisionAfterNoBarcode(bitmap)
                     }
                 )
-                return@launch
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isProcessingFrame = false) }
             }
+        }
+    }
 
-            // 2. OCR Mode: Check for Barcode first (dual-scan support), then Text & Price OCR
-            if (_uiState.value.isOcrActive) {
-                barcodeScanner.scanBitmap(
-                    bitmap = bitmap,
-                    onSuccess = { detectedBarcode ->
-                        handleBarcodeDetected(detectedBarcode, bitmap)
-                    },
-                    onNotFound = {
-                        // No barcode in view -> Process with ML Kit OCR for Brand, Product & Price
-                        ocrScanner.processBitmap(
-                            bitmap = bitmap,
-                            onSuccess = { ocrResult ->
-                                viewModelScope.launch {
-                                    val matched = matchOcrProduct(ocrResult, bitmap)
-                                    if (!matched) {
-                                        _uiState.update { it.copy(isProcessingFrame = false) }
-                                    }
-                                }
-                            },
-                            onNotFound = {
-                                _uiState.update { it.copy(isProcessingFrame = false) }
-                            },
-                            onError = {
-                                _uiState.update { it.copy(isProcessingFrame = false) }
-                            }
-                        )
-                    },
-                    onError = {
-                        // On barcode analysis error, continue to OCR
-                        ocrScanner.processBitmap(
-                            bitmap = bitmap,
-                            onSuccess = { ocrResult ->
-                                viewModelScope.launch {
-                                    val matched = matchOcrProduct(ocrResult, bitmap)
-                                    if (!matched) {
-                                        _uiState.update { it.copy(isProcessingFrame = false) }
-                                    }
-                                }
-                            },
-                            onNotFound = {
-                                _uiState.update { it.copy(isProcessingFrame = false) }
-                            },
-                            onError = {
-                                _uiState.update { it.copy(isProcessingFrame = false) }
-                            }
-                        )
-                    }
+    private fun handleVisionAfterNoBarcode(bitmap: android.graphics.Bitmap) {
+        val state = _uiState.value
+
+        // 1. Dedicated Barcode Mode: user selected barcode mode and no barcode is in view
+        if (state.isBarcodeActive) {
+            _uiState.update {
+                it.copy(
+                    isProcessingFrame = false,
+                    aiStatus = "📷 Point camera at Barcode / QR code"
                 )
-            } else {
-                // Pure Object & Image Detection Mode (YOLOv11 & Visual Classifier)
+            }
+            return
+        }
+
+        // 2. OCR Mode: ML Kit Text & Price Recognition
+        if (state.isOcrActive) {
+            ocrScanner.processBitmap(
+                bitmap = bitmap,
+                onSuccess = { ocrResult ->
+                    viewModelScope.launch {
+                        val matched = matchOcrProduct(ocrResult, bitmap)
+                        if (!matched) {
+                            _uiState.update { it.copy(isProcessingFrame = false) }
+                        }
+                    }
+                },
+                onNotFound = {
+                    _uiState.update { it.copy(isProcessingFrame = false) }
+                },
+                onError = {
+                    _uiState.update { it.copy(isProcessingFrame = false) }
+                }
+            )
+            return
+        }
+
+        // 3. AI Object Detection Mode: On-Device TFLite (15ms) + Fast Fallback
+        viewModelScope.launch {
+            try {
                 val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.25f)
                 if (result != null && result.detections.isNotEmpty()) {
                     _uiState.update { it.copy(consecutiveFailedDetections = 0) }
                     handleYoloMultiDetected(result.detections, bitmap)
                 } else {
-                    // Fast on-device fallback for dataset-only items (e.g. Beardo) or network delay
+                    // Fast on-device fallback for dataset items (Maggi, Oreo, Surf Excel, Beardo, etc.)
                     runOnDeviceFallback(bitmap)
                 }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isProcessingFrame = false) }
             }
         }
     }
@@ -355,7 +363,7 @@ class ScanViewModel(
                 )
 
                 val isRecentlyAdded = (now - lastAdded < addedCooldownMs)
-                val isDismissed = (dismissedProductIds.contains(storeMatch.id) || dismissedProductIds.contains(storeMatch.name.lowercase()))
+                val isDismissed = (now - (dismissedTimestampMap[storeMatch.id] ?: (dismissedTimestampMap[storeMatch.name.lowercase()] ?: 0L)) < dismissedCooldownMs)
 
                 if (isRecentlyAdded || isDismissed) {
                     continue
@@ -364,15 +372,20 @@ class ScanViewModel(
                 // Found high-confidence inventory match
                 detectionStabilityMap.clear()
                 latchedProductIds.clear()
-                _uiState.update {
-                    it.copy(
-                        detectedProduct = storeMatch,
-                        detectedBitmap = bitmap,
-                        detectedProductsList = listOf(storeMatch),
-                        selectedQuantity = 1,
-                        aiStatus = "⚡ Detected: ${storeMatch.name} — Tap 'Add to Bill'",
-                        isProcessingFrame = false
-                    )
+                if (_uiState.value.autoAddEnabled) {
+                    appendProductToActiveBill(storeMatch, 1)
+                    _uiState.update { it.copy(isProcessingFrame = false) }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            detectedProduct = storeMatch,
+                            detectedBitmap = bitmap,
+                            detectedProductsList = listOf(storeMatch),
+                            selectedQuantity = 1,
+                            aiStatus = "⚡ Detected: ${storeMatch.name} — Tap 'Add to Bill'",
+                            isProcessingFrame = false
+                        )
+                    }
                 }
                 return true
             }
@@ -400,7 +413,7 @@ class ScanViewModel(
                 )
 
                 for (matchedCatalogItem in rankedCatalogMatches) {
-                    val isDismissed = (dismissedProductIds.contains(matchedCatalogItem.id ?: "") || dismissedProductIds.contains(matchedCatalogItem.name.lowercase()))
+                    val isDismissed = (now - (dismissedTimestampMap[matchedCatalogItem.id ?: ""] ?: (dismissedTimestampMap[matchedCatalogItem.name.lowercase()] ?: 0L)) < dismissedCooldownMs)
                     if (isDismissed) continue
 
                     val existingInInventory = products.firstOrNull {
@@ -429,15 +442,20 @@ class ScanViewModel(
 
                     detectionStabilityMap.clear()
                     latchedProductIds.clear()
-                    _uiState.update {
-                        it.copy(
-                            detectedProduct = targetProduct,
-                            detectedBitmap = bitmap,
-                            detectedProductsList = listOf(targetProduct),
-                            selectedQuantity = 1,
-                            aiStatus = "⚡ Catalog: ${targetProduct.name} — Tap 'Add to Bill'",
-                            isProcessingFrame = false
-                        )
+                    if (_uiState.value.autoAddEnabled) {
+                        appendProductToActiveBill(targetProduct, 1)
+                        _uiState.update { it.copy(isProcessingFrame = false) }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                detectedProduct = targetProduct,
+                                detectedBitmap = bitmap,
+                                detectedProductsList = listOf(targetProduct),
+                                selectedQuantity = 1,
+                                aiStatus = "⚡ Catalog: ${targetProduct.name} — Tap 'Add to Bill'",
+                                isProcessingFrame = false
+                            )
+                        }
                     }
                     return true
                 }
@@ -725,8 +743,7 @@ class ScanViewModel(
                             recentlyAddedTimestampMap[matched.id] ?: 0L,
                             recentlyAddedTimestampMap[matched.name.lowercase()] ?: 0L
                         )
-                        val isDismissed = dismissedProductIds.contains(matched.id) ||
-                                dismissedProductIds.contains(matched.name.lowercase())
+                        val isDismissed = (now - (dismissedTimestampMap[matched.id] ?: (dismissedTimestampMap[matched.name.lowercase()] ?: 0L)) < dismissedCooldownMs)
 
                         // Proceed if not currently latched, not on cooldown, and not dismissed
                         if (!isLatched && now - lastAdded >= addedCooldownMs && !isDismissed) {
@@ -760,17 +777,27 @@ class ScanViewModel(
 
                 val recommendedSize = getRecommendedSize(firstProduct)
 
-                _uiState.update {
-                    it.copy(
-                        detectedProduct = firstProduct,
-                        detectedBitmap = bitmap,
-                        detectedProductsList = matchedList,
-                        selectedQuantity = 1,
-                        selectedProductSize = recommendedSize,
-                        activeDetections = overlayDetections,
-                        aiStatus = statusText,
-                        isProcessingFrame = false
-                    )
+                if (_uiState.value.autoAddEnabled) {
+                    appendProductToActiveBill(firstProduct, 1)
+                    _uiState.update {
+                        it.copy(
+                            activeDetections = overlayDetections,
+                            isProcessingFrame = false
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            detectedProduct = firstProduct,
+                            detectedBitmap = bitmap,
+                            detectedProductsList = matchedList,
+                            selectedQuantity = 1,
+                            selectedProductSize = recommendedSize,
+                            activeDetections = overlayDetections,
+                            aiStatus = statusText,
+                            isProcessingFrame = false
+                        )
+                    }
                 }
             } else {
                 _uiState.update {
@@ -831,19 +858,31 @@ class ScanViewModel(
         viewModelScope.launch {
             // 1. Direct local inventory check (instant, offline-first)
             val localMatch = _uiState.value.inventoryProducts.find { it.barcode.trim() == cleanBarcode }
-            if x(localMatch != null) {
+                ?: ProductRepositoryImpl.masterCatalog.find { it.barcode.trim() == cleanBarcode }
+
+            if (localMatch != null) {
                 val recommendedSize = getRecommendedSize(localMatch)
-                _uiState.update {
-                    it.copy(
-                        detectedProduct = localMatch,
-                        detectedBitmap = bitmap,
-                        detectedProductsList = listOf(localMatch),
-                        selectedQuantity = 1,
-                        selectedProductSize = recommendedSize,
-                        aiStatus = "✅ ${localMatch.name} (Barcode) — Tap 'Add to Bill'",
-                        showManualEntryDialog = false,
-                        isProcessingFrame = false
-                    )
+                if (_uiState.value.autoAddEnabled) {
+                    appendProductToActiveBill(localMatch, 1)
+                    _uiState.update {
+                        it.copy(
+                            showManualEntryDialog = false,
+                            isProcessingFrame = false
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            detectedProduct = localMatch,
+                            detectedBitmap = bitmap,
+                            detectedProductsList = listOf(localMatch),
+                            selectedQuantity = 1,
+                            selectedProductSize = recommendedSize,
+                            aiStatus = "✅ ${localMatch.name} (Barcode) — Tap 'Add to Bill'",
+                            showManualEntryDialog = false,
+                            isProcessingFrame = false
+                        )
+                    }
                 }
                 return@launch
             }
@@ -859,17 +898,27 @@ class ScanViewModel(
                     barcode = cleanBarcode
                 )
                 val recommendedSize = getRecommendedSize(finalProduct)
-                _uiState.update {
-                    it.copy(
-                        detectedProduct = finalProduct,
-                        detectedBitmap = bitmap,
-                        detectedProductsList = listOf(finalProduct),
-                        selectedQuantity = 1,
-                        selectedProductSize = recommendedSize,
-                        aiStatus = "✅ ${finalProduct.name} — Tap 'Add to Bill'",
-                        showManualEntryDialog = false,
-                        isProcessingFrame = false
-                    )
+                if (_uiState.value.autoAddEnabled) {
+                    appendProductToActiveBill(finalProduct, 1)
+                    _uiState.update {
+                        it.copy(
+                            showManualEntryDialog = false,
+                            isProcessingFrame = false
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            detectedProduct = finalProduct,
+                            detectedBitmap = bitmap,
+                            detectedProductsList = listOf(finalProduct),
+                            selectedQuantity = 1,
+                            selectedProductSize = recommendedSize,
+                            aiStatus = "✅ ${finalProduct.name} — Tap 'Add to Bill'",
+                            showManualEntryDialog = false,
+                            isProcessingFrame = false
+                        )
+                    }
                 }
             }.onFailure { _ ->
                 val fallbackProduct = Product(
@@ -881,17 +930,27 @@ class ScanViewModel(
                     barcode = cleanBarcode
                 )
                 val recommendedSize = getRecommendedSize(fallbackProduct)
-                _uiState.update {
-                    it.copy(
-                        detectedProduct = fallbackProduct,
-                        detectedBitmap = bitmap,
-                        detectedProductsList = listOf(fallbackProduct),
-                        selectedQuantity = 1,
-                        selectedProductSize = recommendedSize,
-                        aiStatus = "✅ ${fallbackProduct.name} — Tap 'Add to Bill'",
-                        showManualEntryDialog = false,
-                        isProcessingFrame = false
-                    )
+                if (_uiState.value.autoAddEnabled) {
+                    appendProductToActiveBill(fallbackProduct, 1)
+                    _uiState.update {
+                        it.copy(
+                            showManualEntryDialog = false,
+                            isProcessingFrame = false
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            detectedProduct = fallbackProduct,
+                            detectedBitmap = bitmap,
+                            detectedProductsList = listOf(fallbackProduct),
+                            selectedQuantity = 1,
+                            selectedProductSize = recommendedSize,
+                            aiStatus = "✅ ${fallbackProduct.name} — Tap 'Add to Bill'",
+                            showManualEntryDialog = false,
+                            isProcessingFrame = false
+                        )
+                    }
                 }
             }
         }
@@ -1122,8 +1181,9 @@ class ScanViewModel(
     }
 
     fun removeDetectedProductFromList(product: Product) {
-        dismissedProductIds.add(product.id)
-        dismissedProductIds.add(product.name.lowercase())
+        val now = System.currentTimeMillis()
+        dismissedTimestampMap[product.id] = now
+        dismissedTimestampMap[product.name.lowercase()] = now
 
         val updatedList = _uiState.value.detectedProductsList.filter { it.id != product.id }
         val newSelected = if (_uiState.value.detectedProduct?.id == product.id) {
@@ -1289,14 +1349,15 @@ class ScanViewModel(
     fun cancelDetection() {
         detectionStabilityMap.clear()
         latchedProductIds.clear()
+        val now = System.currentTimeMillis()
         val currentProduct = _uiState.value.detectedProduct
         if (currentProduct != null) {
-            dismissedProductIds.add(currentProduct.id)
-            dismissedProductIds.add(currentProduct.name.lowercase())
+            dismissedTimestampMap[currentProduct.id] = now
+            dismissedTimestampMap[currentProduct.name.lowercase()] = now
         }
         for (prod in _uiState.value.detectedProductsList) {
-            dismissedProductIds.add(prod.id)
-            dismissedProductIds.add(prod.name.lowercase())
+            dismissedTimestampMap[prod.id] = now
+            dismissedTimestampMap[prod.name.lowercase()] = now
         }
         _uiState.update {
             it.copy(
@@ -1308,6 +1369,10 @@ class ScanViewModel(
                 aiStatus = "Live Scanner Active"
             )
         }
+    }
+
+    fun toggleAutoAdd() {
+        _uiState.update { it.copy(autoAddEnabled = !it.autoAddEnabled) }
     }
 
     fun undoLastAutoAddedProduct() {
@@ -1326,8 +1391,9 @@ class ScanViewModel(
                 grandTotal = newGrandTotal
             )
             salesRepository.saveBill(updatedBill)
-            dismissedProductIds.add(last.id)
-            dismissedProductIds.add(last.name.lowercase())
+            val now = System.currentTimeMillis()
+            dismissedTimestampMap[last.id] = now
+            dismissedTimestampMap[last.name.lowercase()] = now
             _uiState.update {
                 it.copy(
                     currentBill = updatedBill,

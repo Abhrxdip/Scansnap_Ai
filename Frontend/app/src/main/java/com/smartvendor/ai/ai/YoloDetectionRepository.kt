@@ -64,9 +64,22 @@ class YoloDetectionRepository(context: Context? = null) {
         bitmap: Bitmap,
         confThreshold: Float = 0.25f
     ): YoloDetectResponse? = withContext(Dispatchers.IO) {
-        // 1. Backend YOLO endpoint (primary — has all 17+ classes at full accuracy)
+        // 1. Ultra-fast On-Device TFLite inference (~15ms, offline-first)
+        if (tfliteClassifier?.isReady() == true) {
+            try {
+                val tfliteResponse = tfliteClassifier?.detectYolo(bitmap, confThreshold)
+                if (tfliteResponse != null && tfliteResponse.detections.isNotEmpty()) {
+                    Log.d(TAG, "⚡ On-Device TFLite found ${tfliteResponse.detections.size} products: ${tfliteResponse.detections.map { it.label }}")
+                    return@withContext tfliteResponse
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "On-device TFLite inference error: ${e.message}")
+            }
+        }
+
+        // 2. Remote Backend YOLO endpoint (with fallback for any server error)
         try {
-            val scaled = scaleBitmap(bitmap, maxDim = 640)
+            val scaled = scaleBitmap(bitmap, maxDim = 480)
             val base64Jpeg = bitmapToBase64Jpeg(scaled)
             val response = api.detectFromBase64(
                 YoloDetectRequest(image = base64Jpeg, conf = confThreshold)
@@ -81,12 +94,9 @@ class YoloDetectionRepository(context: Context? = null) {
                 Log.w(TAG, "Detection API error: ${response.code()} ${response.message()}")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Backend YOLO unreachable (${e.message}). No fallback — backend is required for accurate detection.")
+            Log.d(TAG, "Backend YOLO unreachable or slow (${e.message})")
         }
 
-        // TFLite fallback disabled for production:
-        // The on-device model only has 11 classes vs 17+ on the backend,
-        // producing conflicting/inaccurate results that confuse the stability system.
         null
     }
 

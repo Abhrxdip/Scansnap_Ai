@@ -280,6 +280,24 @@ fun ScanScreen(
                                 color = if (uiState.isOcrActive) NeuWhite else NeuBlack
                             )
                         }
+
+                        // 4. Auto-Add Mode Toggle
+                        Box(
+                            modifier = Modifier
+                                .neuShadow(2.dp, 2.dp, NeuBlack, 10.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (uiState.autoAddEnabled) NeuGreen else NeuSurface)
+                                .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp))
+                                .clickable { viewModel.toggleAutoAdd() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = if (uiState.autoAddEnabled) "⚡ Auto: ON" else "⚡ Auto: OFF",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 11.sp,
+                                color = NeuBlack
+                            )
+                        }
                     }
                 }
 
