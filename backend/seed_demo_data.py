@@ -6,13 +6,26 @@ Sets up:
 3. Automatically updates any existing store profiles in smartvendor.db so active phone users benefit immediately.
 """
 
+import sys
 from datetime import datetime, timedelta
+from sqlalchemy import text
 import models
 from database import engine, SessionLocal, Base
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 def seed():
-    # 1. Ensure all tables exist
+    # 1. Ensure all tables and columns exist
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        for col in ["latitude", "longitude"]:
+            try:
+                conn.execute(text(f"ALTER TABLE store_profiles ADD COLUMN {col} FLOAT"))
+                conn.commit()
+            except Exception:
+                pass
+
     db = SessionLocal()
     
     try:
