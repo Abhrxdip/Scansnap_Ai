@@ -11,6 +11,11 @@ import {
   Check,
   ZoomIn,
   ZoomOut,
+  Maximize2,
+  Minimize2,
+  Move,
+  RotateCcw,
+  X,
   RotateCw,
   Download,
   Tag,
@@ -348,13 +353,167 @@ export default function AiStudioPage() {
   const [barcodeSearch, setBarcodeSearch] = useState('');
   const [toastMsg, setToastMsg] = useState(null);
   
-  // Interactive canvas states
+  // Interactive canvas states & Ultra Zoom/Pan
   const [zoom, setZoom] = useState(1.0);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
   const [hoveredIdx, setHoveredIdx] = useState(null);
+  const [canvasDataUrl, setCanvasDataUrl] = useState('');
+
+  // Fullscreen Inspection Modal states
+  const [isFullscreenModal, setIsFullscreenModal] = useState(false);
+  const [modalZoom, setModalZoom] = useState(1.0);
+  const [modalPan, setModalPan] = useState({ x: 0, y: 0 });
+  const [isModalPanning, setIsModalPanning] = useState(false);
 
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const viewportRef = useRef(null);
+  const modalViewportRef = useRef(null);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const modalDragStartRef = useRef({ x: 0, y: 0 });
+
+  const handleResetZoomPan = () => {
+    setZoom(1.0);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const handleZoomIn = () => {
+    setZoom(z => Math.min(4.5, Number((z + 0.25).toFixed(2))));
+  };
+
+  const handleZoomOut = () => {
+    setZoom(z => {
+      const next = Math.max(0.4, Number((z - 0.25).toFixed(2)));
+      if (next <= 1.0) setPan({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const handleSetPresetZoom = (val) => {
+    setZoom(val);
+    if (val <= 1.0) {
+      setPan({ x: 0, y: 0 });
+    }
+  };
+
+  const handleMouseDown = (e) => {
+    if (e.button !== 0) return;
+    setIsPanning(true);
+    dragStartRef.current = {
+      x: e.clientX - pan.x,
+      y: e.clientY - pan.y
+    };
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isPanning) return;
+    setPan({
+      x: e.clientX - dragStartRef.current.x,
+      y: e.clientY - dragStartRef.current.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const handleDoubleClick = () => {
+    if (zoom > 1.2) {
+      handleResetZoomPan();
+    } else {
+      setZoom(2.0);
+    }
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      setIsPanning(true);
+      dragStartRef.current = {
+        x: e.touches[0].clientX - pan.x,
+        y: e.touches[0].clientY - pan.y
+      };
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isPanning || e.touches.length !== 1) return;
+    setPan({
+      x: e.touches[0].clientX - dragStartRef.current.x,
+      y: e.touches[0].clientY - dragStartRef.current.y
+    });
+  };
+
+  const handleTouchEnd = () => {
+    setIsPanning(false);
+  };
+
+  const handleOpenFullscreen = () => {
+    if (canvasRef.current) {
+      try {
+        setCanvasDataUrl(canvasRef.current.toDataURL('image/png'));
+      } catch (e) {
+        // ignore
+      }
+    }
+    setModalZoom(1.0);
+    setModalPan({ x: 0, y: 0 });
+    setIsFullscreenModal(true);
+  };
+
+  // Wheel zoom on main canvas
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 0.87;
+      setZoom(prev => {
+        const next = Math.max(0.4, Math.min(4.5, Number((prev * factor).toFixed(2))));
+        if (next <= 1.0) setPan({ x: 0, y: 0 });
+        return next;
+      });
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [previewUrl]);
+
+  // Wheel zoom on modal canvas
+  useEffect(() => {
+    const el = modalViewportRef.current;
+    if (!el || !isFullscreenModal) return;
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 0.87;
+      setModalZoom(prev => {
+        const next = Math.max(0.4, Math.min(5.0, Number((prev * factor).toFixed(2))));
+        if (next <= 1.0) setModalPan({ x: 0, y: 0 });
+        return next;
+      });
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [isFullscreenModal]);
+
+  // Esc key to exit fullscreen modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isFullscreenModal) {
+        setIsFullscreenModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreenModal]);
 
   // Model classes trained in best.pt and registered in ScanSnap AI
   const trainedClasses = [
@@ -394,7 +553,9 @@ export default function AiStudioPage() {
     setPreviewUrl(url);
     setDetectionResult(null);
     setZoom(1.0);
+    setPan({ x: 0, y: 0 });
     setHoveredIdx(null);
+    setCanvasDataUrl('');
   };
 
   const loadPresetSample = async (sample) => {
@@ -443,143 +604,149 @@ export default function AiStudioPage() {
       // Draw clean source image without distortion
       ctx.drawImage(img, 0, 0, imgW, imgH);
 
-      if (!res || !res.detections) return;
+      if (res && res.detections) {
+        const detections = res.detections;
+        const strokeW = Math.max(3, Math.round(imgW / 260));
+        const fontSize = Math.min(20, Math.max(13, Math.round(imgW / 65)));
+        const cornerLen = Math.min(30, Math.max(14, Math.round(imgW / 45)));
 
-      const detections = res.detections;
-      const strokeW = Math.max(3, Math.round(imgW / 260));
-      const fontSize = Math.min(20, Math.max(13, Math.round(imgW / 65)));
-      const cornerLen = Math.min(30, Math.max(14, Math.round(imgW / 45)));
+        detections.forEach((det, idx) => {
+          if (det.confidence < threshold) return;
 
-      detections.forEach((det, idx) => {
-        if (det.confidence < threshold) return;
+          const isHovered = hIdx === idx;
+          const hasHover = hIdx !== null;
+          
+          let [x1, y1, x2, y2] = det.bbox ? [
+            det.bbox[0] * imgW, 
+            det.bbox[1] * imgH, 
+            det.bbox[2] * imgW, 
+            det.bbox[3] * imgH
+          ] : (det.box ? [det.box[0], det.box[1], det.box[2], det.box[3]] : [0, 0, 0, 0]);
 
-        const isHovered = hIdx === idx;
-        const hasHover = hIdx !== null;
-        
-        let [x1, y1, x2, y2] = det.bbox ? [
-          det.bbox[0] * imgW, 
-          det.bbox[1] * imgH, 
-          det.bbox[2] * imgW, 
-          det.bbox[3] * imgH
-        ] : (det.box ? [det.box[0], det.box[1], det.box[2], det.box[3]] : [0, 0, 0, 0]);
+          // Keep inside bounds
+          x1 = Math.max(0, Math.min(imgW - 1, x1));
+          y1 = Math.max(0, Math.min(imgH - 1, y1));
+          x2 = Math.max(x1 + 4, Math.min(imgW, x2));
+          y2 = Math.max(y1 + 4, Math.min(imgH, y2));
+          const w = x2 - x1;
+          const h = y2 - y1;
+          const color = BOX_COLORS[idx % BOX_COLORS.length];
 
-        // Keep inside bounds
-        x1 = Math.max(0, Math.min(imgW - 1, x1));
-        y1 = Math.max(0, Math.min(imgH - 1, y1));
-        x2 = Math.max(x1 + 4, Math.min(imgW, x2));
-        y2 = Math.max(y1 + 4, Math.min(imgH, y2));
-        const w = x2 - x1;
-        const h = y2 - y1;
-        const color = BOX_COLORS[idx % BOX_COLORS.length];
+          ctx.save();
 
-        ctx.save();
+          if (hasHover && !isHovered) {
+            ctx.globalAlpha = 0.35;
+          }
 
-        if (hasHover && !isHovered) {
-          ctx.globalAlpha = 0.35;
-        }
+          // Bounding Box Glow on hover
+          if (isHovered) {
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 16;
+          }
 
-        // Bounding Box Glow on hover
-        if (isHovered) {
-          ctx.shadowColor = color;
-          ctx.shadowBlur = 16;
-        }
-
-        // Box border
-        ctx.lineWidth = isHovered ? strokeW + 2 : strokeW;
-        ctx.strokeStyle = color;
-        ctx.strokeRect(x1, y1, w, h);
-
-        // Highlight box interior
-        ctx.fillStyle = isHovered ? hexToRgba(color, 0.22) : hexToRgba(color, 0.10);
-        ctx.fillRect(x1, y1, w, h);
-
-        // Corner bracket accents (HUD style)
-        ctx.lineWidth = strokeW + 1.5;
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.beginPath();
-        // Top-left
-        ctx.moveTo(x1, y1 + cornerLen);
-        ctx.lineTo(x1, y1);
-        ctx.lineTo(x1 + cornerLen, y1);
-        // Top-right
-        ctx.moveTo(x2 - cornerLen, y1);
-        ctx.lineTo(x2, y1);
-        ctx.lineTo(x2, y1 + cornerLen);
-        // Bottom-left
-        ctx.moveTo(x1, y2 - cornerLen);
-        ctx.lineTo(x1, y2);
-        ctx.lineTo(x1 + cornerLen, y2);
-        // Bottom-right
-        ctx.moveTo(x2 - cornerLen, y2);
-        ctx.lineTo(x2, y2);
-        ctx.lineTo(x2, y2 - cornerLen);
-        ctx.stroke();
-
-        // High-clarity badge
-        if (labelsOn) {
-          const rawName = det.class_name || det.label;
-          const displayName = rawName.length > 26 ? rawName.substring(0, 24) + '…' : rawName;
-          const confText = `${(det.confidence * 100).toFixed(0)}%`;
-
-          ctx.font = `600 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
-          const nameMetrics = ctx.measureText(displayName);
-          ctx.font = `bold ${Math.max(11, fontSize - 2)}px Inter, system-ui, -apple-system, sans-serif`;
-          const confMetrics = ctx.measureText(confText);
-
-          const padX = Math.round(fontSize * 0.55);
-          const padY = Math.round(fontSize * 0.35);
-          const badgeH = fontSize + (padY * 2);
-          const badgeW = nameMetrics.width + confMetrics.width + (padX * 3.5) + (fontSize * 0.7);
-
-          // Smart placement: never cut off top or right
-          let badgeY = (y1 - badgeH - 6 < 0) ? (y1 + 6) : (y1 - badgeH - 6);
-          let badgeX = Math.max(4, Math.min(x1, imgW - badgeW - 4));
-
-          // Draw Badge Container
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-          ctx.shadowBlur = 10;
-          ctx.fillStyle = '#0F172A';
-          drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 6);
-          ctx.fill();
-
-          ctx.shadowBlur = 0;
+          // Box border
+          ctx.lineWidth = isHovered ? strokeW + 2 : strokeW;
           ctx.strokeStyle = color;
-          ctx.lineWidth = 1.5;
+          ctx.strokeRect(x1, y1, w, h);
+
+          // Highlight box interior
+          ctx.fillStyle = isHovered ? hexToRgba(color, 0.22) : hexToRgba(color, 0.10);
+          ctx.fillRect(x1, y1, w, h);
+
+          // Corner bracket accents (HUD style)
+          ctx.lineWidth = strokeW + 1.5;
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.beginPath();
+          // Top-left
+          ctx.moveTo(x1, y1 + cornerLen);
+          ctx.lineTo(x1, y1);
+          ctx.lineTo(x1 + cornerLen, y1);
+          // Top-right
+          ctx.moveTo(x2 - cornerLen, y1);
+          ctx.lineTo(x2, y1);
+          ctx.lineTo(x2, y1 + cornerLen);
+          // Bottom-left
+          ctx.moveTo(x1, y2 - cornerLen);
+          ctx.lineTo(x1, y2);
+          ctx.lineTo(x1 + cornerLen, y2);
+          // Bottom-right
+          ctx.moveTo(x2 - cornerLen, y2);
+          ctx.lineTo(x2, y2);
+          ctx.lineTo(x2, y2 - cornerLen);
           ctx.stroke();
 
-          // Left indicator dot
-          const dotRadius = Math.round(fontSize * 0.28);
-          const dotX = badgeX + padX + dotRadius;
-          const dotY = badgeY + (badgeH / 2);
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
-          ctx.fill();
+          // High-clarity badge
+          if (labelsOn) {
+            const rawName = det.class_name || det.label;
+            const displayName = rawName.length > 26 ? rawName.substring(0, 24) + '…' : rawName;
+            const confText = `${(det.confidence * 100).toFixed(0)}%`;
 
-          // Text label
-          const textX = dotX + dotRadius + Math.round(fontSize * 0.4);
-          const textY = badgeY + padY + fontSize - 2;
-          ctx.font = `600 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillText(displayName, textX, textY);
+            ctx.font = `600 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+            const nameMetrics = ctx.measureText(displayName);
+            ctx.font = `bold ${Math.max(11, fontSize - 2)}px Inter, system-ui, -apple-system, sans-serif`;
+            const confMetrics = ctx.measureText(confText);
 
-          // Confidence pill
-          const confW = confMetrics.width + (padX * 1.2);
-          const confH = badgeH - 6;
-          const confX = badgeX + badgeW - confW - 4;
-          const confY = badgeY + 3;
+            const padX = Math.round(fontSize * 0.55);
+            const padY = Math.round(fontSize * 0.35);
+            const badgeH = fontSize + (padY * 2);
+            const badgeW = nameMetrics.width + confMetrics.width + (padX * 3.5) + (fontSize * 0.7);
 
-          ctx.fillStyle = color;
-          drawRoundedRect(ctx, confX, confY, confW, confH, 4);
-          ctx.fill();
+            // Smart placement: never cut off top or right
+            let badgeY = (y1 - badgeH - 6 < 0) ? (y1 + 6) : (y1 - badgeH - 6);
+            let badgeX = Math.max(4, Math.min(x1, imgW - badgeW - 4));
 
-          ctx.font = `bold ${Math.max(11, fontSize - 2)}px Inter, system-ui, -apple-system, sans-serif`;
-          ctx.fillStyle = '#0A0A0A';
-          ctx.fillText(confText, confX + (padX * 0.6), confY + confH - 3);
-        }
+            // Draw Badge Container
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = '#0F172A';
+            drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 6);
+            ctx.fill();
 
-        ctx.restore();
-      });
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Left indicator dot
+            const dotRadius = Math.round(fontSize * 0.28);
+            const dotX = badgeX + padX + dotRadius;
+            const dotY = badgeY + (badgeH / 2);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Text label
+            const textX = dotX + dotRadius + Math.round(fontSize * 0.4);
+            const textY = badgeY + padY + fontSize - 2;
+            ctx.font = `600 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(displayName, textX, textY);
+
+            // Confidence pill
+            const confW = confMetrics.width + (padX * 1.2);
+            const confH = badgeH - 6;
+            const confX = badgeX + badgeW - confW - 4;
+            const confY = badgeY + 3;
+
+            ctx.fillStyle = color;
+            drawRoundedRect(ctx, confX, confY, confW, confH, 4);
+            ctx.fill();
+
+            ctx.font = `bold ${Math.max(11, fontSize - 2)}px Inter, system-ui, -apple-system, sans-serif`;
+            ctx.fillStyle = '#0A0A0A';
+            ctx.fillText(confText, confX + (padX * 0.6), confY + confH - 3);
+          }
+
+          ctx.restore();
+        });
+      }
+
+      try {
+        setCanvasDataUrl(canvas.toDataURL('image/png'));
+      } catch (err) {
+        // ignore
+      }
     };
 
     img.onload = render;
@@ -622,6 +789,7 @@ export default function AiStudioPage() {
         setDetectionResult(null);
         setError(null);
         setZoom(1.0);
+        setPan({ x: 0, y: 0 });
         setHoveredIdx(null);
       }, 'image/jpeg', 0.95);
     };
@@ -925,42 +1093,131 @@ export default function AiStudioPage() {
                   gap: '8px',
                   zIndex: 10
                 }}>
-                  {/* Zoom Controls */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', marginRight: '4px' }}>
+                  {/* Zoom & Pan Controls */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', marginRight: '2px' }}>
                       Zoom:
                     </span>
                     <button 
-                      onClick={() => setZoom(z => Math.max(0.4, Number((z - 0.2).toFixed(1))))}
+                      onClick={handleZoomOut}
                       className="neu-btn neu-btn-sm"
                       style={{ padding: '3px 8px', fontSize: '11px', background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' }}
-                      title="Zoom Out"
+                      title="Zoom Out (-25%)"
                     >
                       <ZoomOut size={12} />
                     </button>
+                    <input 
+                      type="range"
+                      min="0.4"
+                      max="4.0"
+                      step="0.1"
+                      value={zoom}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setZoom(val);
+                        if (val <= 1.0) setPan({ x: 0, y: 0 });
+                      }}
+                      style={{ width: '85px', accentColor: '#38BDF8', cursor: 'pointer' }}
+                      title="Interactive Zoom Slider"
+                    />
                     <span style={{ fontSize: '11px', fontWeight: 800, color: '#38BDF8', minWidth: '42px', textAlign: 'center' }}>
                       {Math.round(zoom * 100)}%
                     </span>
                     <button 
-                      onClick={() => setZoom(z => Math.min(2.5, Number((z + 0.2).toFixed(1))))}
+                      onClick={handleZoomIn}
                       className="neu-btn neu-btn-sm"
                       style={{ padding: '3px 8px', fontSize: '11px', background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' }}
-                      title="Zoom In"
+                      title="Zoom In (+25%)"
                     >
                       <ZoomIn size={12} />
                     </button>
+
+                    {/* Presets */}
                     <button 
-                      onClick={() => setZoom(1.0)}
+                      onClick={handleResetZoomPan}
                       className="neu-btn neu-btn-sm"
-                      style={{ padding: '3px 8px', fontSize: '11px', background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' }}
-                      title="Fit to Container"
+                      style={{ 
+                        padding: '3px 8px', 
+                        fontSize: '11px', 
+                        background: (zoom === 1.0 && pan.x === 0 && pan.y === 0) ? '#0284C7' : '#1E293B', 
+                        color: '#F8FAFC', 
+                        border: '1px solid #334155' 
+                      }}
+                      title="Fit to Container & Reset Pan"
                     >
                       Fit
                     </button>
+                    <button 
+                      onClick={() => handleSetPresetZoom(1.5)}
+                      className="neu-btn neu-btn-sm"
+                      style={{ 
+                        padding: '3px 6px', 
+                        fontSize: '11px', 
+                        background: zoom === 1.5 ? '#0284C7' : '#1E293B', 
+                        color: '#F8FAFC', 
+                        border: '1px solid #334155' 
+                      }}
+                      title="150% Zoom"
+                    >
+                      1.5x
+                    </button>
+                    <button 
+                      onClick={() => handleSetPresetZoom(2.0)}
+                      className="neu-btn neu-btn-sm"
+                      style={{ 
+                        padding: '3px 6px', 
+                        fontSize: '11px', 
+                        background: zoom === 2.0 ? '#0284C7' : '#1E293B', 
+                        color: '#F8FAFC', 
+                        border: '1px solid #334155' 
+                      }}
+                      title="200% Zoom"
+                    >
+                      2x
+                    </button>
+                    <button 
+                      onClick={() => handleSetPresetZoom(3.0)}
+                      className="neu-btn neu-btn-sm"
+                      style={{ 
+                        padding: '3px 6px', 
+                        fontSize: '11px', 
+                        background: zoom === 3.0 ? '#0284C7' : '#1E293B', 
+                        color: '#F8FAFC', 
+                        border: '1px solid #334155' 
+                      }}
+                      title="300% Zoom"
+                    >
+                      3x
+                    </button>
+
+                    {/* Indicator when panning is active */}
+                    {zoom > 1.05 && (
+                      <span style={{ 
+                        fontSize: '10px', 
+                        padding: '2px 8px', 
+                        borderRadius: '4px', 
+                        background: '#047857', 
+                        color: '#ECFDF5', 
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <Move size={10} /> Drag to Pan
+                      </span>
+                    )}
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <button 
+                      onClick={handleOpenFullscreen}
+                      className="neu-btn neu-btn-sm"
+                      style={{ padding: '4px 10px', fontSize: '11px', background: '#2563EB', color: '#FFF', border: '1px solid #1D4ED8', fontWeight: 800 }}
+                      title="Open Fullscreen Detection Lightbox / Ultra Zoom Inspector"
+                    >
+                      <Maximize2 size={12} /> Inspect Zoom
+                    </button>
                     <button 
                       onClick={handleRotateClockwise}
                       className="neu-btn neu-btn-sm"
@@ -995,18 +1252,32 @@ export default function AiStudioPage() {
                 </div>
               )}
 
-              {/* Viewport Area */}
-              <div style={{ 
-                flex: 1, 
-                minHeight: '380px',
-                maxHeight: '600px',
-                overflow: 'auto',
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                padding: '16px',
-                background: 'radial-gradient(circle at center, #1E293B 0%, #0B0F19 100%)'
-              }}>
+              {/* Viewport Area with Pan & Smooth Wheel Zoom */}
+              <div 
+                ref={viewportRef}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onDoubleClick={handleDoubleClick}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{ 
+                  flex: 1, 
+                  minHeight: '400px',
+                  maxHeight: '620px',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  padding: '16px',
+                  background: 'radial-gradient(circle at center, #1E293B 0%, #0B0F19 100%)',
+                  cursor: zoom > 1.05 ? (isPanning ? 'grabbing' : 'grab') : 'default',
+                  userSelect: 'none'
+                }}
+              >
                 {!previewUrl ? (
                   <div style={{ textAlign: 'center', color: '#777', padding: '30px' }}>
                     <Box size={44} style={{ margin: '0 auto 12px', color: '#555' }} />
@@ -1014,25 +1285,84 @@ export default function AiStudioPage() {
                     <p style={{ fontSize: '12px', color: '#666' }}>Select an image from the left panel to test vision detection</p>
                   </div>
                 ) : (
-                  <div style={{
-                    transform: `scale(${zoom})`,
-                    transformOrigin: 'center center',
-                    transition: 'transform 0.15s ease-out',
-                    maxWidth: '100%',
-                    display: 'flex',
-                    justifyContent: 'center'
-                  }}>
-                    <canvas 
-                      ref={canvasRef} 
-                      style={{ 
-                        maxWidth: '100%', 
-                        height: 'auto', 
-                        display: 'block',
-                        borderRadius: '6px',
-                        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
-                      }} 
-                    />
-                  </div>
+                  <>
+                    <div style={{
+                      transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                      transformOrigin: 'center center',
+                      transition: isPanning ? 'none' : 'transform 0.12s ease-out',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      willChange: 'transform'
+                    }}>
+                      <canvas 
+                        ref={canvasRef} 
+                        style={{ 
+                          maxWidth: zoom <= 1 ? '100%' : 'none', 
+                          maxHeight: zoom <= 1 ? '560px' : 'none', 
+                          display: 'block',
+                          borderRadius: '6px',
+                          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6)'
+                        }} 
+                      />
+                    </div>
+
+                    {/* Quick navigation hint pill */}
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '10px',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: 'rgba(15, 23, 42, 0.85)',
+                      backdropFilter: 'blur(6px)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      borderRadius: '20px',
+                      padding: '4px 12px',
+                      fontSize: '11px',
+                      color: '#CBD5E1',
+                      pointerEvents: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      zIndex: 5
+                    }}>
+                      <span>🖱️ <b>Scroll</b> to zoom</span>
+                      <span>•</span>
+                      <span>✋ <b>Drag</b> to pan</span>
+                      <span>•</span>
+                      <span>⚡ <b>Double-click</b> for 2x</span>
+                      <span>•</span>
+                      <span>🔍 <b>Inspect</b> for Fullscreen</span>
+                    </div>
+
+                    {/* Floating Reset Button when panned or zoomed */}
+                    {(zoom !== 1.0 || pan.x !== 0 || pan.y !== 0) && (
+                      <button
+                        onClick={handleResetZoomPan}
+                        style={{
+                          position: 'absolute',
+                          top: '12px',
+                          right: '12px',
+                          background: 'rgba(15, 23, 42, 0.92)',
+                          border: '1px solid #334155',
+                          borderRadius: '6px',
+                          padding: '5px 10px',
+                          color: '#38BDF8',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+                          zIndex: 5
+                        }}
+                        title="Reset Zoom & Center View"
+                      >
+                        <RotateCcw size={11} /> Reset View
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -1588,6 +1918,357 @@ export default function AiStudioPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Fullscreen Ultra Zoom & Detection Inspector Lightbox Modal */}
+      {isFullscreenModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99999,
+          background: 'rgba(5, 8, 15, 0.97)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* Modal Header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 24px',
+            background: '#0B0F19',
+            borderBottom: '1px solid #1E293B',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                background: '#0284C7',
+                color: '#FFF',
+                padding: '4px 8px',
+                borderRadius: '6px',
+                fontWeight: 900,
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                letterSpacing: '0.5px'
+              }}>
+                <Sparkles size={13} /> ULTRA ZOOM INSPECTOR
+              </div>
+              <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#F8FAFC', margin: 0 }}>
+                High-Resolution Detection Canvas
+              </h3>
+              {detectionResult?.detections && (
+                <span style={{
+                  background: '#10B981',
+                  color: '#064E3B',
+                  fontWeight: 800,
+                  fontSize: '11px',
+                  padding: '2px 8px',
+                  borderRadius: '12px'
+                }}>
+                  {detectionResult.detections.filter(d => d.confidence >= confidenceThreshold).length} Objects Verified
+                </span>
+              )}
+            </div>
+
+            {/* Modal Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* Zoom Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#1E293B', padding: '4px 10px', borderRadius: '8px', border: '1px solid #334155' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8' }}>ZOOM:</span>
+                <button
+                  onClick={() => setModalZoom(z => Math.max(0.4, Number((z - 0.25).toFixed(2))))}
+                  style={{ background: 'transparent', border: 'none', color: '#F8FAFC', cursor: 'pointer', padding: '2px' }}
+                  title="Zoom Out"
+                >
+                  <ZoomOut size={14} />
+                </button>
+                <input 
+                  type="range"
+                  min="0.4"
+                  max="4.5"
+                  step="0.1"
+                  value={modalZoom}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setModalZoom(val);
+                    if (val <= 1.0) setModalPan({ x: 0, y: 0 });
+                  }}
+                  style={{ width: '80px', accentColor: '#38BDF8', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#38BDF8', minWidth: '45px', textAlign: 'center' }}>
+                  {Math.round(modalZoom * 100)}%
+                </span>
+                <button
+                  onClick={() => setModalZoom(z => Math.min(5.0, Number((z + 0.25).toFixed(2))))}
+                  style={{ background: 'transparent', border: 'none', color: '#F8FAFC', cursor: 'pointer', padding: '2px' }}
+                  title="Zoom In"
+                >
+                  <ZoomIn size={14} />
+                </button>
+                <button
+                  onClick={() => { setModalZoom(1.0); setModalPan({ x: 0, y: 0 }); }}
+                  style={{
+                    background: (modalZoom === 1.0 && modalPan.x === 0 && modalPan.y === 0) ? '#0284C7' : '#334155',
+                    border: 'none',
+                    color: '#FFF',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Fit
+                </button>
+                <button
+                  onClick={() => setModalZoom(1.5)}
+                  style={{
+                    background: modalZoom === 1.5 ? '#0284C7' : '#334155',
+                    border: 'none',
+                    color: '#FFF',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  1.5x
+                </button>
+                <button
+                  onClick={() => setModalZoom(2.0)}
+                  style={{
+                    background: modalZoom === 2.0 ? '#0284C7' : '#334155',
+                    border: 'none',
+                    color: '#FFF',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  2x
+                </button>
+                <button
+                  onClick={() => setModalZoom(3.0)}
+                  style={{
+                    background: modalZoom === 3.0 ? '#0284C7' : '#334155',
+                    border: 'none',
+                    color: '#FFF',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  3x
+                </button>
+              </div>
+
+              {/* Action buttons */}
+              <button
+                onClick={() => setShowLabels(v => !v)}
+                style={{
+                  background: showLabels ? '#8B5CF6' : '#1E293B',
+                  border: '1px solid #334155',
+                  color: '#FFF',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Tag size={13} /> {showLabels ? 'Labels ON' : 'Labels OFF'}
+              </button>
+
+              <button
+                onClick={handleDownloadAnnotated}
+                style={{
+                  background: '#10B981',
+                  border: 'none',
+                  color: '#0A0A0A',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Download size={13} /> Save PNG
+              </button>
+
+              <button
+                onClick={() => setIsFullscreenModal(false)}
+                style={{
+                  background: '#EF4444',
+                  border: 'none',
+                  color: '#FFF',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Close Fullscreen (Esc)"
+              >
+                <X size={15} /> Close (Esc)
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Main Viewport */}
+          <div
+            ref={modalViewportRef}
+            onMouseDown={(e) => {
+              if (e.button !== 0) return;
+              setIsModalPanning(true);
+              modalDragStartRef.current = {
+                x: e.clientX - modalPan.x,
+                y: e.clientY - modalPan.y
+              };
+            }}
+            onMouseMove={(e) => {
+              if (!isModalPanning) return;
+              setModalPan({
+                x: e.clientX - modalDragStartRef.current.x,
+                y: e.clientY - modalDragStartRef.current.y
+              });
+            }}
+            onMouseUp={() => setIsModalPanning(false)}
+            onMouseLeave={() => setIsModalPanning(false)}
+            onDoubleClick={() => {
+              if (modalZoom > 1.2) {
+                setModalZoom(1.0);
+                setModalPan({ x: 0, y: 0 });
+              } else {
+                setModalZoom(2.0);
+              }
+            }}
+            style={{
+              flex: 1,
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: modalZoom > 1.05 ? (isModalPanning ? 'grabbing' : 'grab') : 'default',
+              userSelect: 'none',
+              background: 'radial-gradient(circle at center, #1E293B 0%, #05080F 100%)'
+            }}
+          >
+            {(canvasDataUrl || canvasRef.current) && (
+              <div style={{
+                transform: `translate(${modalPan.x}px, ${modalPan.y}px) scale(${modalZoom})`,
+                transformOrigin: 'center center',
+                transition: isModalPanning ? 'none' : 'transform 0.12s ease-out',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                willChange: 'transform'
+              }}>
+                <img 
+                  src={canvasDataUrl || (canvasRef.current ? canvasRef.current.toDataURL('image/png') : '')} 
+                  alt="Detection High Resolution Detail" 
+                  style={{
+                    maxWidth: modalZoom <= 1 ? '90vw' : 'none',
+                    maxHeight: modalZoom <= 1 ? '78vh' : 'none',
+                    borderRadius: '8px',
+                    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.85)'
+                  }}
+                  draggable={false}
+                />
+              </div>
+            )}
+
+            {/* Floating Navigation Pill */}
+            <div style={{
+              position: 'absolute',
+              bottom: '16px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(15, 23, 42, 0.92)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid #334155',
+              borderRadius: '24px',
+              padding: '6px 18px',
+              fontSize: '12px',
+              color: '#CBD5E1',
+              pointerEvents: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <span>🖱️ <b>Scroll wheel</b> to zoom</span>
+              <span>•</span>
+              <span>✋ <b>Click & drag</b> to pan</span>
+              <span>•</span>
+              <span>⚡ <b>Double-click</b> to toggle 2x</span>
+              <span>•</span>
+              <span>⌨️ <b>Esc</b> to exit</span>
+            </div>
+          </div>
+
+          {/* Modal Footer with Detected Items Quick Bar */}
+          {detectionResult?.detections && (
+            <div style={{
+              background: '#0B0F19',
+              borderTop: '1px solid #1E293B',
+              padding: '10px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              overflowX: 'auto'
+            }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                Detected Items:
+              </span>
+              {detectionResult.detections
+                .filter(d => d.confidence >= confidenceThreshold)
+                .map((det, idx) => {
+                  const color = BOX_COLORS[idx % BOX_COLORS.length];
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: '#1E293B',
+                        border: `1.5px solid ${color}`,
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        fontSize: '12px',
+                        color: '#F8FAFC',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color }} />
+                      <span style={{ fontWeight: 700 }}>{det.class_name || det.label}</span>
+                      <span style={{ background: color, color: '#0A0A0A', fontSize: '10px', fontWeight: 900, padding: '1px 5px', borderRadius: '4px' }}>
+                        {(det.confidence * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </div>
       )}
     </div>
