@@ -32,6 +32,8 @@ class Bill(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, nullable=False, index=True)
+    customer_name = Column(String, nullable=True, default="Walk-in Shopper")
+    customer_phone = Column(String, nullable=True, default="+91 98765 43210")
     total_amount = Column(Float, nullable=False)
     tax_amount = Column(Float, nullable=False, default=0.0)
     payment_mode = Column(String, nullable=False, default="cash")

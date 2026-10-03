@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
-from auth import CurrentUser
+from auth import CurrentUser, OptionalUser
 import models
 import schemas
 
@@ -143,7 +143,7 @@ def create_product(
 @router.get("/barcode/{barcode}", response_model=schemas.ProductResponse)
 def get_product_by_barcode(
     barcode: str,
-    user_id: CurrentUser,
+    user_id: OptionalUser,
     db: Session = Depends(get_db)
 ):
     # 1. Search in user's inventory

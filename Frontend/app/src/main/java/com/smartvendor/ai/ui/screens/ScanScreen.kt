@@ -32,6 +32,11 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import android.graphics.Bitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -216,40 +221,62 @@ fun ScanScreen(
                         isBarcodeActive = uiState.isBarcodeActive || uiState.isOcrActive
                     )
 
-                    // Scanner Mode Chips: Object Detection vs OCR Mode
+                    // Scanner Mode Chips: Object Detection vs Barcode vs OCR Mode
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // 1. AI Object Detection Mode
+                        val isObjectActive = !uiState.isOcrActive && !uiState.isBarcodeActive
                         Box(
                             modifier = Modifier
                                 .neuShadow(2.dp, 2.dp, NeuBlack, 10.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (!uiState.isOcrActive) NeuYellow else NeuSurface)
+                                .background(if (isObjectActive) NeuYellow else NeuSurface)
                                 .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp))
-                                .clickable { viewModel.toggleScanMode(useOcr = false) }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .clickable { viewModel.setObjectDetectionMode() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = "🔍 Object Detection",
+                                text = "🔍 AI Object",
                                 fontWeight = FontWeight.Black,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 color = NeuBlack
                             )
                         }
 
+                        // 2. Dedicated Barcode Mode
+                        Box(
+                            modifier = Modifier
+                                .neuShadow(2.dp, 2.dp, NeuBlack, 10.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (uiState.isBarcodeActive) NeuGreen else NeuSurface)
+                                .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp))
+                                .clickable { viewModel.setBarcodeMode() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "📷 Barcode",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 11.sp,
+                                color = NeuBlack
+                            )
+                        }
+
+                        // 3. OCR Text & Price Mode
                         Box(
                             modifier = Modifier
                                 .neuShadow(2.dp, 2.dp, NeuBlack, 10.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(if (uiState.isOcrActive) NeuBlue else NeuSurface)
                                 .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(10.dp))
-                                .clickable { viewModel.toggleScanMode(useOcr = true) }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .clickable { viewModel.setOcrMode() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = "📝 OCR Mode",
+                                text = "📝 Text OCR",
                                 fontWeight = FontWeight.Black,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 color = if (uiState.isOcrActive) NeuWhite else NeuBlack
                             )
                         }
@@ -286,6 +313,7 @@ fun ScanScreen(
                             uiState.detectedProduct?.let { product ->
                                 DetectedProductCard(
                                     product = product,
+                                    detectedBitmap = uiState.detectedBitmap,
                                     selectedQuantity = uiState.selectedQuantity,
                                     onIncrease = { viewModel.increaseQuantity() },
                                     onDecrease = { viewModel.decreaseQuantity() },
@@ -560,7 +588,7 @@ fun AiStatusBanner(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (isBarcodeActive) "📷 Barcode Scanner Active" else "🤖 AI Object Detection Active",
+                text = if (status.isNotBlank()) status else if (isBarcodeActive) "📷 Barcode Scanner Active" else "🤖 AI Object Detection Active",
                 fontWeight = FontWeight.Black,
                 fontSize = 12.sp,
                 color = if (isBarcodeActive) NeuWhite else NeuBlack
@@ -572,6 +600,7 @@ fun AiStatusBanner(
 @Composable
 fun DetectedProductCard(
     product: Product,
+    detectedBitmap: Bitmap? = null,
     selectedQuantity: Int,
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
@@ -589,15 +618,30 @@ fun DetectedProductCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (detectedBitmap != null) {
+                    Image(
+                        bitmap = detectedBitmap.asImageBitmap(),
+                        contentDescription = product.name,
+                        modifier = Modifier
+                            .size(62.dp)
+                            .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = product.name,
                         fontWeight = FontWeight.Black,
-                        fontSize = 18.sp,
-                        color = NeuBlack
+                        fontSize = 17.sp,
+                        color = NeuBlack,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Category: ${product.category}",
@@ -609,7 +653,7 @@ fun DetectedProductCard(
                 Text(
                     text = "₹${"%.2f".format(product.price)}",
                     fontWeight = FontWeight.Black,
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     color = NeuBlue
                 )
             }
@@ -688,11 +732,11 @@ fun DetectedProductCard(
                     cornerRadius = 10.dp
                 )
                 NeuButton(
-                    text = "Add to Bill",
+                    text = "➕ Add to Bill",
                     onClick = onAdd,
                     backgroundColor = NeuYellow,
                     textColor = NeuBlack,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.3f),
                     shadowOffset = 3.dp,
                     cornerRadius = 10.dp
                 )

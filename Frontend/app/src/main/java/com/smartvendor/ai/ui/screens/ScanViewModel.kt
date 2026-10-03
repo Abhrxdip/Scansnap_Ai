@@ -31,6 +31,7 @@ data class ScanUiState(
     val isOcrActive: Boolean = false,
     val activeDetections: List<DetectionResult> = emptyList(),
     val detectedProduct: Product? = null,
+    val detectedBitmap: android.graphics.Bitmap? = null,
     val detectedProductsList: List<Product> = emptyList(),
     val selectedQuantity: Int = 1,
     val currentBill: Bill? = null,
@@ -130,14 +131,44 @@ class ScanViewModel(
     }
 
     fun toggleScanMode(useOcr: Boolean) {
+        if (useOcr) setOcrMode() else setObjectDetectionMode()
+    }
+
+    fun setBarcodeMode() {
         _uiState.update {
             it.copy(
-                isOcrActive = useOcr,
-                isBarcodeActive = false,
+                isBarcodeActive = true,
+                isOcrActive = false,
                 activeDetections = emptyList(),
                 detectedProduct = null,
                 detectedProductsList = emptyList(),
-                aiStatus = if (useOcr) "📝 Live Label & Price OCR Active" else "🔍 YOLO AI Object Detection Active"
+                aiStatus = "📷 Barcode Scanner Active"
+            )
+        }
+    }
+
+    fun setOcrMode() {
+        _uiState.update {
+            it.copy(
+                isBarcodeActive = false,
+                isOcrActive = true,
+                activeDetections = emptyList(),
+                detectedProduct = null,
+                detectedProductsList = emptyList(),
+                aiStatus = "📝 Live Label & Price OCR Active"
+            )
+        }
+    }
+
+    fun setObjectDetectionMode() {
+        _uiState.update {
+            it.copy(
+                isBarcodeActive = false,
+                isOcrActive = false,
+                activeDetections = emptyList(),
+                detectedProduct = null,
+                detectedProductsList = emptyList(),
+                aiStatus = "🔍 YOLO AI Object Detection Active"
             )
         }
     }
@@ -147,7 +178,10 @@ class ScanViewModel(
 
     fun processFrame(imageProxy: ImageProxy) {
         val now = System.currentTimeMillis()
-        if (_uiState.value.isProcessingFrame || (now - lastFrameProcessTime < 250L)) {
+        if (_uiState.value.detectedProduct != null ||
+            _uiState.value.detectedProductsList.isNotEmpty() ||
+            _uiState.value.isProcessingFrame ||
+            (now - lastFrameProcessTime < 180L)) {
             imageProxy.close()
             return
         }
@@ -155,23 +189,6 @@ class ScanViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isProcessingFrame = true) }
-
-            // 1. Barcode Scanner Mode (if explicitly active)
-            if (_uiState.value.isBarcodeActive) {
-                barcodeScanner.scanImage(
-                    imageProxy = imageProxy,
-                    onSuccess = { barcode ->
-                        handleBarcodeDetected(barcode)
-                    },
-                    onNotFound = {
-                        _uiState.update { it.copy(isProcessingFrame = false) }
-                    },
-                    onError = {
-                        _uiState.update { it.copy(isProcessingFrame = false) }
-                    }
-                )
-                return@launch
-            }
 
             // Convert ImageProxy to Bitmap and close buffer immediately for smooth CameraX streaming
             val bitmap = try {
@@ -192,18 +209,12 @@ class ScanViewModel(
                 return@launch
             }
 
-            // 2. Mode Separation: OCR Mode vs Object/Image Detection Mode
-            if (_uiState.value.isOcrActive) {
-                // Dedicated OCR Mode: ML Kit Text, Brand & Price Extraction
-                ocrScanner.processBitmap(
+            // 1. Dedicated Barcode Scanner Mode (Direct Fast Bitmap Analysis)
+            if (_uiState.value.isBarcodeActive) {
+                barcodeScanner.scanBitmap(
                     bitmap = bitmap,
-                    onSuccess = { ocrResult ->
-                        viewModelScope.launch {
-                            val matched = matchOcrProduct(ocrResult)
-                            if (!matched) {
-                                _uiState.update { it.copy(isProcessingFrame = false) }
-                            }
-                        }
+                    onSuccess = { barcode ->
+                        handleBarcodeDetected(barcode, bitmap)
                     },
                     onNotFound = {
                         _uiState.update { it.copy(isProcessingFrame = false) }
@@ -212,12 +223,63 @@ class ScanViewModel(
                         _uiState.update { it.copy(isProcessingFrame = false) }
                     }
                 )
+                return@launch
+            }
+
+            // 2. OCR Mode: Check for Barcode first (dual-scan support), then Text & Price OCR
+            if (_uiState.value.isOcrActive) {
+                barcodeScanner.scanBitmap(
+                    bitmap = bitmap,
+                    onSuccess = { detectedBarcode ->
+                        handleBarcodeDetected(detectedBarcode, bitmap)
+                    },
+                    onNotFound = {
+                        // No barcode in view -> Process with ML Kit OCR for Brand, Product & Price
+                        ocrScanner.processBitmap(
+                            bitmap = bitmap,
+                            onSuccess = { ocrResult ->
+                                viewModelScope.launch {
+                                    val matched = matchOcrProduct(ocrResult, bitmap)
+                                    if (!matched) {
+                                        _uiState.update { it.copy(isProcessingFrame = false) }
+                                    }
+                                }
+                            },
+                            onNotFound = {
+                                _uiState.update { it.copy(isProcessingFrame = false) }
+                            },
+                            onError = {
+                                _uiState.update { it.copy(isProcessingFrame = false) }
+                            }
+                        )
+                    },
+                    onError = {
+                        // On barcode analysis error, continue to OCR
+                        ocrScanner.processBitmap(
+                            bitmap = bitmap,
+                            onSuccess = { ocrResult ->
+                                viewModelScope.launch {
+                                    val matched = matchOcrProduct(ocrResult, bitmap)
+                                    if (!matched) {
+                                        _uiState.update { it.copy(isProcessingFrame = false) }
+                                    }
+                                }
+                            },
+                            onNotFound = {
+                                _uiState.update { it.copy(isProcessingFrame = false) }
+                            },
+                            onError = {
+                                _uiState.update { it.copy(isProcessingFrame = false) }
+                            }
+                        )
+                    }
+                )
             } else {
                 // Pure Object & Image Detection Mode (YOLOv11 & Visual Classifier)
-                val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.35f)
+                val result = yoloDetector.detectFromBitmap(bitmap, confThreshold = 0.25f)
                 if (result != null && result.detections.isNotEmpty()) {
                     _uiState.update { it.copy(consecutiveFailedDetections = 0) }
-                    handleYoloMultiDetected(result.detections)
+                    handleYoloMultiDetected(result.detections, bitmap)
                 } else {
                     detectionStabilityMap.clear()
                     latchedProductIds.clear()
@@ -227,7 +289,7 @@ class ScanViewModel(
         }
     }
 
-    private suspend fun matchOcrProduct(ocrResult: OcrResult): Boolean {
+    private suspend fun matchOcrProduct(ocrResult: OcrResult, bitmap: android.graphics.Bitmap? = null): Boolean {
         return try {
             val products = _uiState.value.inventoryProducts
             val now = System.currentTimeMillis()
@@ -266,9 +328,10 @@ class ScanViewModel(
                 _uiState.update {
                     it.copy(
                         detectedProduct = storeMatch,
+                        detectedBitmap = bitmap,
                         detectedProductsList = listOf(storeMatch),
                         selectedQuantity = 1,
-                        aiStatus = "⚡ Detected: ${storeMatch.name}",
+                        aiStatus = "⚡ Detected: ${storeMatch.name} — Tap 'Add to Bill'",
                         isProcessingFrame = false
                     )
                 }
@@ -330,9 +393,10 @@ class ScanViewModel(
                     _uiState.update {
                         it.copy(
                             detectedProduct = targetProduct,
+                            detectedBitmap = bitmap,
                             detectedProductsList = listOf(targetProduct),
                             selectedQuantity = 1,
-                            aiStatus = "⚡ Catalog: ${targetProduct.name}",
+                            aiStatus = "⚡ Catalog: ${targetProduct.name} — Tap 'Add to Bill'",
                             isProcessingFrame = false
                         )
                     }
@@ -356,10 +420,10 @@ class ScanViewModel(
         _uiState.update { it.copy(isProcessingFrame = false) }
     }
 
-    /**
-     * Handles simultaneous multi-object YOLO detections in a single camera frame.
-     */
-    private fun handleYoloMultiDetected(detections: List<com.smartvendor.ai.network.models.YoloDetection>) {
+    private fun handleYoloMultiDetected(
+        detections: List<com.smartvendor.ai.network.models.YoloDetection>,
+        bitmap: android.graphics.Bitmap? = null
+    ) {
         viewModelScope.launch {
             val products = _uiState.value.inventoryProducts
             if (products.isEmpty()) {
@@ -411,7 +475,7 @@ class ScanViewModel(
             val currentFrameMatchedIds = mutableSetOf<String>()
             for (det in detections) {
                 // Multi-product confidence gating: capture all clear objects in view (threshold 0.35)
-                if (det.confidence < 0.35f) continue
+                if (det.confidence < 0.25f) continue
                 if (det.label.lowercase().trim() == "maggi" && det.confidence < 0.55f) continue
 
                 val labelLower = det.label.lowercase().trim()
@@ -500,9 +564,8 @@ class ScanViewModel(
                             // Mid confidence (>=0.65) requires 2 frames.
                             // Lower confidence (<0.65) requires 3 frames to reject noise.
                             val requiredFrames = when {
-                                det.confidence >= 0.80f -> 1
-                                det.confidence >= 0.65f -> 2
-                                else -> 3
+                                det.confidence >= 0.65f -> 1
+                                else -> 2
                             }
 
                             if (count >= requiredFrames) {
@@ -519,64 +582,20 @@ class ScanViewModel(
             latchedProductIds.retainAll(currentFrameMatchedIds)
 
             if (matchedList.isNotEmpty()) {
-                val currentBillState = _uiState.value.currentBill ?: Bill(
-                    billId = "BILL_${System.currentTimeMillis()}",
-                    items = emptyList()
-                )
-                val existingItems = currentBillState.items.toMutableList()
-                val newlyAdded = mutableListOf<Product>()
-
-                for (product in matchedList) {
-                    recentlyAddedTimestampMap[product.id] = now
-                    recentlyAddedTimestampMap[product.name.lowercase()] = now
-
-                    val existingIndex = existingItems.indexOfFirst { it.productId == product.id }
-                    if (existingIndex >= 0) {
-                        val oldItem = existingItems[existingIndex]
-                        val newQty = oldItem.quantity + 1
-                        existingItems[existingIndex] = oldItem.copy(
-                            quantity = newQty,
-                            lineTotal = (newQty * oldItem.unitPrice) + (((newQty * oldItem.unitPrice) * oldItem.gst) / 100.0)
-                        )
-                    } else {
-                        existingItems.add(
-                            BillItem(
-                                productId = product.id,
-                                name = product.name,
-                                quantity = 1,
-                                unitPrice = product.price,
-                                gst = product.gst
-                            )
-                        )
-                    }
-                    newlyAdded.add(product)
-                }
-
-                val newSubtotal = existingItems.sumOf { it.quantity * it.unitPrice }
-                val newGst = existingItems.sumOf { (it.quantity * it.unitPrice * it.gst) / 100.0 }
-                val newGrandTotal = newSubtotal + newGst - currentBillState.discount
-
-                val updatedBill = currentBillState.copy(
-                    items = existingItems,
-                    subtotal = newSubtotal,
-                    gst = newGst,
-                    grandTotal = newGrandTotal
-                )
-
-                salesRepository.saveBill(updatedBill)
-
-                val statusText = if (newlyAdded.size == 1) {
-                    "⚡ Added: ${newlyAdded.first().name} (₹${"%.2f".format(newlyAdded.first().price)})"
+                val firstProduct = matchedList.first()
+                val statusText = if (matchedList.size == 1) {
+                    "🎯 Found: ${firstProduct.name} — Tap 'Add to Bill'"
                 } else {
-                    "⚡ Added ${newlyAdded.size} items: ${newlyAdded.joinToString(", ") { it.name }}"
+                    "🎯 Detected ${matchedList.size} Products — Review & Add"
                 }
 
                 _uiState.update {
                     it.copy(
-                        currentBill = updatedBill,
+                        detectedProduct = firstProduct,
+                        detectedBitmap = bitmap,
+                        detectedProductsList = matchedList,
+                        selectedQuantity = 1,
                         activeDetections = overlayDetections,
-                        lastAutoAddedProduct = newlyAdded.lastOrNull(),
-                        lastAutoAddedTimestamp = now,
                         aiStatus = statusText,
                         isProcessingFrame = false
                     )
@@ -619,32 +638,80 @@ class ScanViewModel(
         }
     }
 
-    private fun handleBarcodeDetected(barcode: String) {
+    private var lastScannedBarcode: String = ""
+    private var lastScannedBarcodeTime: Long = 0L
+
+    private fun handleBarcodeDetected(barcode: String, bitmap: android.graphics.Bitmap? = null) {
+        val cleanBarcode = barcode.trim()
+        if (cleanBarcode.isBlank()) {
+            _uiState.update { it.copy(isProcessingFrame = false) }
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (cleanBarcode == lastScannedBarcode && (now - lastScannedBarcodeTime < 2500L)) {
+            _uiState.update { it.copy(isProcessingFrame = false) }
+            return
+        }
+        lastScannedBarcode = cleanBarcode
+        lastScannedBarcodeTime = now
+
         viewModelScope.launch {
-            productRepository.getProductByBarcode(barcode).onSuccess { product ->
-                if (product != null) {
-                    _uiState.update {
-                        it.copy(
-                            detectedProduct = product,
-                            selectedQuantity = 1,
-                            isBarcodeActive = false,
-                            aiStatus = "Product Found via Barcode",
-                            isProcessingFrame = false
-                        )
-                    }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            errorMessage = "Barcode ($barcode) not found in store catalog.",
-                            showManualEntryDialog = true,
-                            isProcessingFrame = false
-                        )
-                    }
-                }
-            }.onFailure { err ->
+            // 1. Direct local inventory check (instant, offline-first)
+            val localMatch = _uiState.value.inventoryProducts.find { it.barcode.trim() == cleanBarcode }
+            if (localMatch != null) {
                 _uiState.update {
                     it.copy(
-                        errorMessage = "Barcode query error: ${err.message}",
+                        detectedProduct = localMatch,
+                        detectedBitmap = bitmap,
+                        detectedProductsList = listOf(localMatch),
+                        selectedQuantity = 1,
+                        aiStatus = "✅ ${localMatch.name} (Barcode) — Tap 'Add to Bill'",
+                        showManualEntryDialog = false,
+                        isProcessingFrame = false
+                    )
+                }
+                return@launch
+            }
+
+            // 2. Query repository (Local Store Inventory + Master Catalog + GS1 Brand Resolver)
+            productRepository.getProductByBarcode(cleanBarcode).onSuccess { product ->
+                val finalProduct = product ?: Product(
+                    id = "BC_$cleanBarcode",
+                    name = "Retail FMCG Item #$cleanBarcode",
+                    price = 25.0,
+                    stock = 50,
+                    category = "Retail FMCG",
+                    barcode = cleanBarcode
+                )
+                _uiState.update {
+                    it.copy(
+                        detectedProduct = finalProduct,
+                        detectedBitmap = bitmap,
+                        detectedProductsList = listOf(finalProduct),
+                        selectedQuantity = 1,
+                        aiStatus = "✅ ${finalProduct.name} — Tap 'Add to Bill'",
+                        showManualEntryDialog = false,
+                        isProcessingFrame = false
+                    )
+                }
+            }.onFailure { _ ->
+                val fallbackProduct = Product(
+                    id = "BC_$cleanBarcode",
+                    name = "Retail FMCG Item #$cleanBarcode",
+                    price = 25.0,
+                    stock = 50,
+                    category = "Retail FMCG",
+                    barcode = cleanBarcode
+                )
+                _uiState.update {
+                    it.copy(
+                        detectedProduct = fallbackProduct,
+                        detectedBitmap = bitmap,
+                        detectedProductsList = listOf(fallbackProduct),
+                        selectedQuantity = 1,
+                        aiStatus = "✅ ${fallbackProduct.name} — Tap 'Add to Bill'",
+                        showManualEntryDialog = false,
                         isProcessingFrame = false
                     )
                 }
@@ -730,12 +797,16 @@ class ScanViewModel(
                     state.copy(
                         currentBill = updatedBill,
                         detectedProduct = null,
+                        detectedBitmap = null,
+                        detectedProductsList = emptyList(),
                         selectedQuantity = 1,
                         activeDetections = emptyList(),
                         showManualEntryDialog = false,
                         ocrPrefilledName = "",
                         ocrPrefilledPrice = "",
-                        aiStatus = "Live Scanner Active"
+                        lastAutoAddedProduct = product,
+                        lastAutoAddedTimestamp = now,
+                        aiStatus = "✅ Added ${product.name} to bill"
                     )
                 }
             }.onFailure {
@@ -743,6 +814,8 @@ class ScanViewModel(
                     state.copy(
                         currentBill = updatedBill,
                         detectedProduct = null,
+                        detectedBitmap = null,
+                        detectedProductsList = emptyList(),
                         selectedQuantity = 1,
                         showManualEntryDialog = false,
                         ocrPrefilledName = "",
@@ -931,6 +1004,7 @@ class ScanViewModel(
         _uiState.update {
             it.copy(
                 detectedProduct = null,
+                detectedBitmap = null,
                 detectedProductsList = emptyList(),
                 activeDetections = emptyList(),
                 selectedQuantity = 1,

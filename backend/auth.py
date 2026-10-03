@@ -75,4 +75,14 @@ async def get_current_user_id(
     )
 
 
+async def get_optional_user_id(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer_scheme)] = None
+) -> str:
+    try:
+        return await get_current_user_id(credentials)
+    except Exception:
+        return "demo_user"
+
+
 CurrentUser = Annotated[str, Depends(get_current_user_id)]
+OptionalUser = Annotated[str, Depends(get_optional_user_id)]

@@ -62,11 +62,11 @@ class YoloDetectionRepository(context: Context? = null) {
      */
     suspend fun detectFromBitmap(
         bitmap: Bitmap,
-        confThreshold: Float = 0.30f
+        confThreshold: Float = 0.25f
     ): YoloDetectResponse? = withContext(Dispatchers.IO) {
-        // 1. Try Backend YOLO endpoint
+        // 1. Backend YOLO endpoint (primary — has all 17+ classes at full accuracy)
         try {
-            val scaled = scaleBitmap(bitmap, maxDim = 480)
+            val scaled = scaleBitmap(bitmap, maxDim = 640)
             val base64Jpeg = bitmapToBase64Jpeg(scaled)
             val response = api.detectFromBase64(
                 YoloDetectRequest(image = base64Jpeg, conf = confThreshold)
@@ -81,22 +81,12 @@ class YoloDetectionRepository(context: Context? = null) {
                 Log.w(TAG, "Detection API error: ${response.code()} ${response.message()}")
             }
         } catch (e: Exception) {
-            Log.d(TAG, "Backend YOLO unreachable or slow (${e.message}), using On-Device TFLite")
+            Log.w(TAG, "Backend YOLO unreachable (${e.message}). No fallback — backend is required for accurate detection.")
         }
 
-        // 2. On-Device TFLite Fallback / Acceleration
-        if (tfliteClassifier?.isReady() == true) {
-            try {
-                val tfliteResponse = tfliteClassifier?.detectYolo(bitmap, confThreshold)
-                if (tfliteResponse != null && tfliteResponse.detections.isNotEmpty()) {
-                    Log.d(TAG, "⚡ On-Device TFLite found ${tfliteResponse.detections.size} products: ${tfliteResponse.detections.map { it.label }}")
-                    return@withContext tfliteResponse
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "On-Device TFLite inference error: ${e.message}")
-            }
-        }
-
+        // TFLite fallback disabled for production:
+        // The on-device model only has 11 classes vs 17+ on the backend,
+        // producing conflicting/inaccurate results that confuse the stability system.
         null
     }
 
@@ -120,7 +110,7 @@ class YoloDetectionRepository(context: Context? = null) {
 
     private fun bitmapToBase64Jpeg(bitmap: Bitmap): String {
         val out = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
         return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 
