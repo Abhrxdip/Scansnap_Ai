@@ -210,9 +210,67 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
                     
                 response_lines.append(f"• {p.name} is {status} ({p.stock} available). The price is ₹{p.price}.{stale_check}")
                 
+            nearby_options = []
             if has_out_of_stock:
-                response_lines.append(f"\n💡 Tip: Since it's out of stock here, ask \"Where else can I find {product_name}?\" to locate nearby stores!")
-                
+                # Automatically query nearby partner stores so Add to Cart cards appear immediately!
+                current_store = db.query(models.StoreProfile).filter(models.StoreProfile.user_id == store_id).first()
+                curr_lat = current_store.latitude if (current_store and current_store.latitude is not None) else 12.9716
+                curr_lon = current_store.longitude if (current_store and current_store.longitude is not None) else 77.5946
+
+                alternatives = db.query(models.Product, models.StoreProfile).outerjoin(
+                    models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
+                ).filter(
+                    models.Product.user_id != store_id,
+                    models.Product.name.ilike(f"%{product_name}%"),
+                    models.Product.stock > 0
+                ).all()
+
+                if not alternatives:
+                    terms = [t for t in product_name.split() if len(t) > 1]
+                    if terms:
+                        filters = [models.Product.name.ilike(f"%{t}%") for t in terms]
+                        alternatives = db.query(models.Product, models.StoreProfile).outerjoin(
+                            models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
+                        ).filter(
+                            models.Product.user_id != store_id,
+                            models.Product.stock > 0,
+                            or_(*filters)
+                        ).all()
+
+                if alternatives:
+                    response_lines.append(f"\n🏬 Found '{product_name}' at nearby partner stores:")
+                    results = []
+                    for alt_p, alt_s in alternatives:
+                        dist = None
+                        if curr_lat is not None and curr_lon is not None and alt_s and alt_s.latitude is not None and alt_s.longitude is not None:
+                            dist = haversine(curr_lat, curr_lon, alt_s.latitude, alt_s.longitude)
+                        results.append({"store": alt_s, "product": alt_p, "dist": dist})
+
+                    results.sort(key=lambda x: (x["dist"] if x["dist"] is not None else float('inf'), x["product"].price))
+                    results = results[:5]
+
+                    for res in results:
+                        dist_str = f"{res['dist']:.1f} km" if res['dist'] is not None else "Nearby"
+                        time_ago = get_time_ago_str(res['product'].updated_at)
+                        store_display_name = res['store'].name if (res['store'] and res['store'].name) else "Nearby Partner Store"
+                        response_lines.append(
+                            f"• {store_display_name}: ₹{res['product'].price} | {dist_str} | Updated {time_ago}"
+                        )
+                        nearby_options.append({
+                            "product_id": str(res["product"].id),
+                            "product_name": res["product"].name,
+                            "store_id": str(res["product"].user_id),
+                            "store_name": store_display_name,
+                            "store_address": res["store"].address if res["store"] else "",
+                            "store_phone": res["store"].phone if res["store"] else "",
+                            "price": float(res["product"].price),
+                            "stock": int(res["product"].stock),
+                            "distance_km": round(res["dist"], 1) if res["dist"] is not None else None,
+                            "time_ago": time_ago
+                        })
+
+            return {"success": True, "response": "\n".join(response_lines), "nearby_options": nearby_options}
+
     elif intent == "CATEGORY_SEARCH" and category:
         products = db.query(models.Product).filter(
             models.Product.user_id == store_id,
