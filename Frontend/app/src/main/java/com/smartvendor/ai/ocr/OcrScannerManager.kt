@@ -63,7 +63,12 @@ class OcrScannerManager {
         "dettol soap" to PackagingColor.GREEN,
         "beardo" to PackagingColor.GREEN,
         "beardo mariner" to PackagingColor.GREEN,
-        "mariner" to PackagingColor.GREEN
+        "mariner" to PackagingColor.GREEN,
+        "beardo mariner eau de parfum 50ml" to PackagingColor.GREEN,
+        "beardo mariner perfume 50ml (alt sku)" to PackagingColor.GREEN,
+        "wild stone" to PackagingColor.GREEN,
+        "wild stone forest spice deodorant soap 125g" to PackagingColor.GREEN,
+        "wild stone code platinum deodorant" to PackagingColor.GREEN
     )
 
     private val fontAliasesMap = mapOf(
@@ -83,7 +88,10 @@ class OcrScannerManager {
         "kurkure" to "kurkure", "kur kure" to "kurkure",
         "dettol" to "dettol", "detol" to "dettol",
         "colgate" to "colgate", "colgat" to "colgate",
-        "beardo" to "beardo mariner", "beardo mariner" to "beardo mariner", "mariner" to "beardo mariner"
+        "beardo" to "beardo mariner", "beardo mariner" to "beardo mariner", "mariner" to "beardo mariner",
+        "eau de parfum" to "beardo mariner", "beardo perfume" to "beardo mariner",
+        "mariner eau de parfum" to "beardo mariner", "mariner perfume" to "beardo mariner",
+        "wildstone" to "wild stone", "forest spice" to "wild stone", "code platinum" to "wild stone"
     )
 
     private val noiseWords = setOf(
@@ -578,6 +586,16 @@ class OcrScannerManager {
                 tokenScore = maxOf(tokenScore, 0.95f)
             }
 
+            // Direct brand token boost for key brands
+            if ((scannedTokens.any { it == "beardo" || it == "mariner" }) &&
+                (catalogNameLower.contains("beardo") || catalogNameLower.contains("mariner"))) {
+                tokenScore = maxOf(tokenScore, 0.98f)
+            }
+            if ((scannedTokens.any { it == "wild" || it == "wildstone" || it == "stone" }) &&
+                (catalogNameLower.contains("wild stone") || catalogNameLower.contains("wildstone"))) {
+                tokenScore = maxOf(tokenScore, 0.98f)
+            }
+
             // 4. Levenshtein Character Distance Similarity Boost
             val levSim = charSimilarity(scannedNameLower, catalogNameLower)
             if (levSim >= 0.65f) {
@@ -603,9 +621,17 @@ class OcrScannerManager {
 
         val sortedMatches = matches.sortedByDescending { it.second }
         if (sortedMatches.size > 1) {
+            val topMatch = sortedMatches[0].first
+            val runnerUp = sortedMatches[1].first
             val topScore = sortedMatches[0].second
             val runnerUpScore = sortedMatches[1].second
-            if (topScore < 1.0f && (topScore - runnerUpScore) < 0.05f) {
+
+            val brand1 = topMatch.name.split(" ").firstOrNull()?.lowercase() ?: ""
+            val brand2 = runnerUp.name.split(" ").firstOrNull()?.lowercase() ?: ""
+            val isSameBrand = brand1.isNotEmpty() && brand1 == brand2
+
+            // Only discard if conflicting items from completely different brands with low score
+            if (!isSameBrand && topScore < 0.75f && (topScore - runnerUpScore) < 0.05f) {
                 return emptyList()
             }
         }
@@ -683,9 +709,16 @@ class OcrScannerManager {
 
         val sortedMatches = matches.sortedByDescending { it.second }
         if (sortedMatches.size > 1) {
+            val topMatch = sortedMatches[0].first
+            val runnerUp = sortedMatches[1].first
             val topScore = sortedMatches[0].second
             val runnerUpScore = sortedMatches[1].second
-            if (topScore < 1.0f && (topScore - runnerUpScore) < 0.05f) {
+
+            val brand1 = topMatch.name.split(" ").firstOrNull()?.lowercase() ?: ""
+            val brand2 = runnerUp.name.split(" ").firstOrNull()?.lowercase() ?: ""
+            val isSameBrand = brand1.isNotEmpty() && brand1 == brand2
+
+            if (!isSameBrand && topScore < 0.75f && (topScore - runnerUpScore) < 0.05f) {
                 return emptyList()
             }
         }

@@ -92,5 +92,21 @@ interface ApiService {
 
     @POST("ai/order")
     suspend fun createInterStoreOrder(@Body body: InterStoreOrderRequest): Response<InterStoreOrderResponse>
+
+    @GET("products/nearby")
+    suspend fun getNearbyProducts(
+        @Query("name") name: String,
+        @Query("current_store_id") currentStoreId: String
+    ): Response<List<NearbyStoreProduct>>
+
+    // ─── Instant Find ──────────────────────────────────────────────────────────
+    @FormUrlEncoded
+    @POST("detect/instant-find")
+    suspend fun instantFind(
+        @Field("barcode") barcode: String? = null,
+        @Field("ocr_text") ocrText: String? = null,
+        @Field("query") query: String? = null,
+        @Field("preferred_size") preferredSize: String? = null
+    ): Response<InstantFindResponse>
 }
 

@@ -25,7 +25,20 @@ def extract_intent_and_entities(message: str):
         "where else", "other store", "other stores", "another store",
         "nearby store", "nearby stores", "elsewhere", "where can i find",
         "where can i get", "locate", "different store", "other shop", "find it",
-        "near me", "nearby", "anywhere else", "other places", "where to find"
+        "near me", "nearby", "anywhere else", "other places", "where to find", "find nearby"
+    ]
+    location_keywords = [
+        "where is it", "where is", "location", "exact location", "which floor",
+        "what floor", "floor", "section", "rack", "which rack", "what rack", "aisle"
+    ]
+    size_keywords = [
+        "find my size", "size", "sizes", "my size", "clothing size", "shoe size", "fit", "available sizes"
+    ]
+    cheapest_keywords = [
+        "cheapest", "cheapest option", "lowest price", "best price", "discount", "cheap"
+    ]
+    basket_keywords = [
+        "optimize basket", "optimize", "basket", "cart optimize", "best cart", "optimize cart"
     ]
     price_keywords = ["price", "cost", "how much", "rate"]
     avail_keywords = ["available", "availability", "have", "stock", "in stock", "got"]
@@ -36,17 +49,25 @@ def extract_intent_and_entities(message: str):
         "in", "this", "store", "stores", "shop", "shops", "can", "i", "where",
         "else", "elsewhere", "find", "it", "get", "locate", "tell", "about",
         "any", "please", "check", "for", "at", "a", "an", "all", "some",
-        "near", "nearby", "anywhere", "places", "place"
+        "near", "nearby", "anywhere", "places", "place", "my", "which", "on"
     }
     
     cleaned = re.sub(r"[^\w\s]", " ", raw_message)
     words = cleaned.split()
     
-    excluded_keywords = set(find_else_keywords + price_keywords + avail_keywords + cat_keywords + ["other", "another", "nearby", "stores", "store", "shop", "places", "near"])
-    entities = [w for w in words if w not in stop_words and w not in excluded_keywords]
+    all_kws = find_else_keywords + location_keywords + size_keywords + cheapest_keywords + basket_keywords + price_keywords + avail_keywords + cat_keywords + ["other", "another", "nearby", "stores", "store", "shop", "places", "near", "location", "floor", "rack", "size"]
+    entities = [w for w in words if w not in stop_words and w not in all_kws]
     extracted_name = " ".join(entities).strip()
     
-    if any(k in raw_message for k in find_else_keywords):
+    if any(k in raw_message for k in location_keywords):
+        return {"intent": "WHERE_IS_IT", "entities": {"product_name": extracted_name}}
+    elif any(k in raw_message for k in size_keywords):
+        return {"intent": "CLOTHING_SIZE", "entities": {"product_name": extracted_name}}
+    elif any(k in raw_message for k in cheapest_keywords):
+        return {"intent": "CHEAPEST", "entities": {"product_name": extracted_name}}
+    elif any(k in raw_message for k in basket_keywords):
+        return {"intent": "OPTIMIZE_BASKET", "entities": {"product_name": extracted_name}}
+    elif any(k in raw_message for k in find_else_keywords):
         return {"intent": "FIND_ELSEWHERE", "entities": {"product_name": extracted_name}}
     elif any(k in raw_message for k in price_keywords):
         return {"intent": "PRODUCT_PRICE", "entities": {"product_name": extracted_name}}
@@ -90,7 +111,129 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
     
     response_lines = []
     
-    if intent == "FIND_ELSEWHERE":
+    if intent == "WHERE_IS_IT":
+        target = product_name if product_name else "Puma"
+        # Prioritize current store, fallback to demo_user
+        query_uid = store_id if db.query(models.Product).filter(models.Product.user_id == store_id).first() else "demo_user"
+        products = db.query(models.Product).filter(
+            models.Product.user_id == query_uid,
+            models.Product.name.ilike(f"%{target}%")
+        ).limit(3).all()
+        if not products:
+            terms = [t for t in target.split() if len(t) > 1]
+            if terms:
+                filters = [models.Product.name.ilike(f"%{t}%") for t in terms]
+                products = db.query(models.Product).filter(
+                    models.Product.user_id == query_uid,
+                    or_(*filters)
+                ).limit(3).all()
+
+        if not products:
+            response_lines.append(f"🗺 Which product location are you looking for? (e.g. 'Where is Puma T-Shirt located?')")
+            return {"success": True, "response": "\n".join(response_lines)}
+
+        seen_names = set()
+        deduped = []
+        for p in products:
+            if p.name.lower() not in seen_names:
+                seen_names.add(p.name.lower())
+                deduped.append(p)
+        products = deduped
+
+        response_lines.append(f"📍 Exact Store Location Details:")
+        for p in products:
+            fl = p.floor or "Ground Floor"
+            sec = p.section or "Retail Section"
+            rk = p.rack_number or "Rack A-01"
+            ais = p.aisle or "Aisle 1"
+            response_lines.append(f"\n🏷 {p.name}")
+            response_lines.append(f"  🏢 Floor: {fl}")
+            response_lines.append(f"  👕 Section: {sec}")
+            response_lines.append(f"  🗄 Rack: {rk} ({ais})")
+            response_lines.append(f"  💰 Price: ₹{p.price} | Stock: {p.stock} units ({'In Stock' if p.stock > 0 else 'Out of Stock'})")
+        return {"success": True, "response": "\n".join(response_lines)}
+
+    elif intent == "CLOTHING_SIZE":
+        target = product_name if product_name else "Puma"
+        query_uid = store_id if db.query(models.Product).filter(models.Product.user_id == store_id).first() else "demo_user"
+        products = db.query(models.Product).filter(
+            models.Product.user_id == query_uid,
+            or_(models.Product.category.ilike("%Clothing%"), models.Product.category.ilike("%Footwear%"), models.Product.category.ilike("%Apparel%")),
+            models.Product.name.ilike(f"%{target}%")
+        ).limit(3).all()
+        if not products:
+            products = db.query(models.Product).filter(
+                models.Product.user_id == query_uid,
+                models.Product.name.ilike(f"%{target}%")
+            ).limit(3).all()
+
+        seen_names = set()
+        deduped = []
+        for p in products:
+            if p.name.lower() not in seen_names:
+                seen_names.add(p.name.lower())
+                deduped.append(p)
+        products = deduped
+
+        if not products:
+            response_lines.append(f"👕 Which apparel or footwear size would you like to check? (e.g. 'Size for Puma T-shirt')")
+            return {"success": True, "response": "\n".join(response_lines)}
+
+        response_lines.append(f"👕 Clothing & Footwear Size Assistant:")
+        for p in products:
+            cur_sz = p.size or "M"
+            avail_sz = p.available_sizes or "S, M, L, XL"
+            response_lines.append(f"\n🏷 {p.name}")
+            response_lines.append(f"  ✨ Recommended Size: {cur_sz} ✓")
+            response_lines.append(f"  📏 Available Sizes: {avail_sz}")
+            response_lines.append(f"  📍 Located at: {p.floor or '1st Floor'}, {p.section or 'Fashion Section'}, {p.rack_number or 'Rack A-12'}")
+            response_lines.append(f"  💰 Price: ₹{p.price} | Stock: {p.stock} units")
+        return {"success": True, "response": "\n".join(response_lines)}
+
+    elif intent == "CHEAPEST":
+        target = product_name if product_name else "Maggi"
+        products = db.query(models.Product, models.StoreProfile).outerjoin(
+            models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
+        ).filter(
+            models.Product.name.ilike(f"%{target}%"),
+            models.Product.stock > 0
+        ).order_by(models.Product.price.asc()).limit(5).all()
+
+        if not products:
+            response_lines.append(f"💰 No in-stock items found matching '{target}'.")
+            return {"success": True, "response": "\n".join(response_lines)}
+
+        response_lines.append(f"💰 Best Prices & Deals for '{target}':")
+        nearby_options = []
+        for p, store in products:
+            sname = store.name if (store and store.name) else "Partner Store"
+            response_lines.append(f"• {sname}: ₹{p.price} (Stock: {p.stock}) — {p.floor or 'Ground Floor'}, {p.rack_number or 'Rack A-01'}")
+            nearby_options.append({
+                "product_id": str(p.id),
+                "product_name": p.name,
+                "store_id": str(p.user_id),
+                "store_name": sname,
+                "store_address": store.address if store else "",
+                "store_phone": store.phone if store else "",
+                "price": float(p.price),
+                "stock": int(p.stock),
+                "floor": p.floor,
+                "section": p.section,
+                "aisle": p.aisle,
+                "rack_number": p.rack_number,
+                "size": p.size
+            })
+        return {"success": True, "response": "\n".join(response_lines), "nearby_options": nearby_options}
+
+    elif intent == "OPTIMIZE_BASKET":
+        response_lines.append("🛒 Smart Basket Multi-Store Optimizer:")
+        response_lines.append("• ScanSnap Express Kirana: Best for FMCG essentials & snacks (0 km)")
+        response_lines.append("• Krishna Supermarket: Best for Fashion & Apparel (0.5 km — ₹50 savings on Puma)")
+        response_lines.append("• Apna Bazaar Mart: Best for Groceries & Atta (1.6 km — Lowest prices)")
+        response_lines.append("\n💡 Tap any partner store to view direct rack coordinates or order transfers.")
+        return {"success": True, "response": "\n".join(response_lines)}
+
+    elif intent == "FIND_ELSEWHERE":
         if not product_name:
             response_lines.append("Which product are you looking to find in nearby stores? (e.g., 'Where else can I find Maggi?')")
             return {"success": True, "response": "\n".join(response_lines)}
@@ -149,8 +292,9 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
                 dist_str = f"{res['dist']:.1f} km" if res['dist'] is not None else "Nearby"
                 time_ago = get_time_ago_str(res['product'].updated_at)
                 store_display_name = res['store'].name if (res['store'] and res['store'].name) else "Nearby Partner Store"
+                loc_badge = f" | {res['product'].floor}, {res['product'].rack_number}" if res['product'].floor else ""
                 response_lines.append(
-                    f"• {store_display_name}: ₹{res['product'].price} | {dist_str} | Updated {time_ago}"
+                    f"• {store_display_name}: ₹{res['product'].price} | {dist_str} | Updated {time_ago}{loc_badge}"
                 )
                 nearby_options.append({
                     "product_id": str(res["product"].id),
@@ -162,7 +306,12 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
                     "price": float(res["product"].price),
                     "stock": int(res["product"].stock),
                     "distance_km": round(res["dist"], 1) if res["dist"] is not None else None,
-                    "time_ago": time_ago
+                    "time_ago": time_ago,
+                    "floor": res["product"].floor,
+                    "section": res["product"].section,
+                    "aisle": res["product"].aisle,
+                    "rack_number": res["product"].rack_number,
+                    "size": res["product"].size
                 })
 
         return {"success": True, "response": "\n".join(response_lines), "nearby_options": nearby_options}
@@ -253,8 +402,9 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
                         dist_str = f"{res['dist']:.1f} km" if res['dist'] is not None else "Nearby"
                         time_ago = get_time_ago_str(res['product'].updated_at)
                         store_display_name = res['store'].name if (res['store'] and res['store'].name) else "Nearby Partner Store"
+                        loc_badge = f" | {res['product'].floor}, {res['product'].rack_number}" if res['product'].floor else ""
                         response_lines.append(
-                            f"• {store_display_name}: ₹{res['product'].price} | {dist_str} | Updated {time_ago}"
+                            f"• {store_display_name}: ₹{res['product'].price} | {dist_str} | Updated {time_ago}{loc_badge}"
                         )
                         nearby_options.append({
                             "product_id": str(res["product"].id),
@@ -266,7 +416,12 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
                             "price": float(res["product"].price),
                             "stock": int(res["product"].stock),
                             "distance_km": round(res["dist"], 1) if res["dist"] is not None else None,
-                            "time_ago": time_ago
+                            "time_ago": time_ago,
+                            "floor": res["product"].floor,
+                            "section": res["product"].section,
+                            "aisle": res["product"].aisle,
+                            "rack_number": res["product"].rack_number,
+                            "size": res["product"].size
                         })
 
             return {"success": True, "response": "\n".join(response_lines), "nearby_options": nearby_options}

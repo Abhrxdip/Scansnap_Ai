@@ -15,6 +15,14 @@ data class Product(
     val stock: Int = 0,
     val lowStockThreshold: Int = 5,
     val imageUrl: String = "",
+    val brand: String = "",
+    val size: String = "",
+    val availableSizes: String = "",
+    val floor: String = "",
+    val section: String = "",
+    val aisle: String = "",
+    val rackNumber: String = "",
+    val storeName: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

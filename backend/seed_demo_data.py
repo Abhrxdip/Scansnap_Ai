@@ -25,6 +25,17 @@ def seed(db=None):
                 conn.commit()
             except Exception:
                 pass
+        for col in ["brand", "size", "available_sizes", "floor", "section", "aisle", "rack_number"]:
+            try:
+                conn.execute(text(f"ALTER TABLE products ADD COLUMN {col} VARCHAR"))
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                conn.execute(text(f"ALTER TABLE master_catalog ADD COLUMN {col} VARCHAR"))
+                conn.commit()
+            except Exception:
+                pass
 
     close_db = False
     if db is None:
@@ -197,6 +208,73 @@ def seed(db=None):
                 {"name": "Vim Dishwash Bar with Lemon 300g", "barcode": "8901262010177", "category": "Household & Cleaning", "price": 15.0, "stock": 150},
                 {"name": "Lizol Disinfectant Floor Cleaner Citrus 500ml", "barcode": "8901262010178", "category": "Household & Cleaning", "price": 110.0, "stock": 35},
                 {"name": "Harpic Power Plus Toilet Cleaner 500ml", "barcode": "8901262010179", "category": "Household & Cleaning", "price": 95.0, "stock": 40},
+                # Fashion & Apparel (Cross-category Hackathon Showcases)
+                {
+                    "name": "Puma Regular Fit T-Shirt",
+                    "barcode": "8901262010999",
+                    "category": "Clothing",
+                    "brand": "Puma",
+                    "size": "M",
+                    "available_sizes": "S, M, L, XL",
+                    "price": 1499.0,
+                    "stock": 12,
+                    "floor": "1st Floor",
+                    "section": "Fashion Section",
+                    "aisle": "Aisle 4",
+                    "rack_number": "Rack A-12"
+                },
+                {
+                    "name": "Nike Revolution 6 Running Shoes",
+                    "barcode": "8901262010998",
+                    "category": "Footwear",
+                    "brand": "Nike",
+                    "size": "UK-8",
+                    "available_sizes": "UK-7, UK-8, UK-9",
+                    "price": 3695.0,
+                    "stock": 8,
+                    "floor": "2nd Floor",
+                    "section": "Footwear Section",
+                    "aisle": "Aisle 1",
+                    "rack_number": "Rack F-07"
+                },
+                {
+                    "name": "boAt Rockerz 450 Bluetooth Headphones",
+                    "barcode": "8901262010997",
+                    "category": "Electronics",
+                    "brand": "boAt",
+                    "price": 1499.0,
+                    "stock": 20,
+                    "floor": "Ground Floor",
+                    "section": "Electronics & Audio",
+                    "aisle": "Aisle 6",
+                    "rack_number": "Rack E-03"
+                },
+                {
+                    "name": "Nivia Storm Football Size 5",
+                    "barcode": "8901262010996",
+                    "category": "Sports",
+                    "brand": "Nivia",
+                    "size": "Size 5",
+                    "available_sizes": "Size 4, Size 5",
+                    "price": 549.0,
+                    "stock": 15,
+                    "floor": "2nd Floor",
+                    "section": "Sports & Fitness",
+                    "aisle": "Aisle 5",
+                    "rack_number": "Rack S-02"
+                },
+                {
+                    "name": "Milton Thermosteel Flip Lid Flask 1000ml",
+                    "barcode": "8901262010995",
+                    "category": "Home",
+                    "brand": "Milton",
+                    "price": 999.0,
+                    "stock": 22,
+                    "floor": "1st Floor",
+                    "section": "Home & Kitchen",
+                    "aisle": "Aisle 7",
+                    "rack_number": "Rack H-08"
+                },
             ]
             for p_data in primary_products:
                 p = db.query(models.Product).filter(
@@ -207,8 +285,15 @@ def seed(db=None):
                     p = models.Product(
                         user_id=uid,
                         name=p_data["name"],
-                        barcode=p_data["barcode"],
-                        category=p_data["category"],
+                        barcode=p_data.get("barcode"),
+                        category=p_data.get("category", "General"),
+                        brand=p_data.get("brand"),
+                        size=p_data.get("size"),
+                        available_sizes=p_data.get("available_sizes"),
+                        floor=p_data.get("floor", "Ground Floor"),
+                        section=p_data.get("section", "General Retail"),
+                        aisle=p_data.get("aisle", "Aisle 1"),
+                        rack_number=p_data.get("rack_number", "Rack R-01"),
                         price=p_data["price"],
                         stock=p_data["stock"],
                         updated_at=datetime.utcnow()
@@ -217,12 +302,81 @@ def seed(db=None):
                 else:
                     p.stock = p_data["stock"]
                     p.price = p_data["price"]
+                    p.category = p_data.get("category", p.category)
+                    p.brand = p_data.get("brand", p.brand)
+                    p.size = p_data.get("size", p.size)
+                    p.available_sizes = p_data.get("available_sizes", p.available_sizes)
+                    p.floor = p_data.get("floor", p.floor)
+                    p.section = p_data.get("section", p.section)
+                    p.aisle = p_data.get("aisle", p.aisle)
+                    p.rack_number = p_data.get("rack_number", p.rack_number)
 
         # Partner Store 1 (Krishna Supermarket - 0.5 km away)
         nearby_1_products = [
-            {"name": "Maggi 2-Minute Noodles 70g", "barcode": "8901058852394", "category": "Instant Food", "price": 14.0, "stock": 42},
-            {"name": "Amul Taaza Homogenised Toned Milk 500ml", "barcode": "8901262150020", "category": "Dairy", "price": 27.0, "stock": 15},
-            {"name": "Kurkure Masala Munch 90g", "barcode": "8901491101831", "category": "Snacks", "price": 20.0, "stock": 50},
+            {
+                "name": "Maggi 2-Minute Noodles 70g",
+                "barcode": "8901058852394",
+                "category": "Instant Food",
+                "brand": "Nestle",
+                "price": 14.0,
+                "stock": 42,
+                "floor": "Ground Floor",
+                "section": "Grocery",
+                "aisle": "Aisle 2",
+                "rack_number": "Rack G-04"
+            },
+            {
+                "name": "Puma Regular Fit T-Shirt",
+                "barcode": "8901262010999",
+                "category": "Clothing",
+                "brand": "Puma",
+                "size": "L",
+                "available_sizes": "M, L, XL",
+                "price": 1449.0,
+                "stock": 15,
+                "floor": "1st Floor",
+                "section": "Apparel Wing",
+                "aisle": "Aisle 4",
+                "rack_number": "Rack F-04"
+            },
+            {
+                "name": "Nike Revolution 6 Running Shoes",
+                "barcode": "8901262010998",
+                "category": "Footwear",
+                "brand": "Nike",
+                "size": "UK-9",
+                "available_sizes": "UK-8, UK-9",
+                "price": 3599.0,
+                "stock": 6,
+                "floor": "1st Floor",
+                "section": "Sports Footwear",
+                "aisle": "Aisle 2",
+                "rack_number": "Rack K-02"
+            },
+            {
+                "name": "Amul Taaza Homogenised Toned Milk 500ml",
+                "barcode": "8901262150020",
+                "category": "Dairy",
+                "brand": "Amul",
+                "price": 27.0,
+                "stock": 15,
+                "floor": "Ground Floor",
+                "section": "Chilled Dairy",
+                "aisle": "Chiller 1",
+                "rack_number": "Rack C-01"
+            },
+            {
+                "name": "Kurkure Masala Munch 90g",
+                "barcode": "8901491101831",
+                "category": "Snacks",
+                "brand": "Kurkure",
+                "price": 20.0,
+                "stock": 50,
+                "floor": "Ground Floor",
+                "section": "Snacks & Namkeen",
+                "aisle": "Aisle 3",
+                "rack_number": "Rack S-05"
+            },
         ]
         for p_data in nearby_1_products:
             p = db.query(models.Product).filter(
@@ -233,8 +387,15 @@ def seed(db=None):
                 db.add(models.Product(
                     user_id="store_nearby_1",
                     name=p_data["name"],
-                    barcode=p_data["barcode"],
-                    category=p_data["category"],
+                    barcode=p_data.get("barcode"),
+                    category=p_data.get("category", "General"),
+                    brand=p_data.get("brand"),
+                    size=p_data.get("size"),
+                    available_sizes=p_data.get("available_sizes"),
+                    floor=p_data.get("floor", "Ground Floor"),
+                    section=p_data.get("section", "General Retail"),
+                    aisle=p_data.get("aisle", "Aisle 1"),
+                    rack_number=p_data.get("rack_number", "Rack R-01"),
                     price=p_data["price"],
                     stock=p_data["stock"],
                     updated_at=datetime.utcnow() - timedelta(minutes=15)
@@ -242,12 +403,63 @@ def seed(db=None):
             else:
                 p.stock = p_data["stock"]
                 p.price = p_data["price"]
+                p.floor = p_data.get("floor", p.floor)
+                p.section = p_data.get("section", p.section)
+                p.aisle = p_data.get("aisle", p.aisle)
+                p.rack_number = p_data.get("rack_number", p.rack_number)
 
-        # Partner Store 2 (Apna Bazaar Mart - 1.6 km away, discount on Maggi!)
+        # Partner Store 2 (Apna Bazaar Mart - 1.6 km away)
         nearby_2_products = [
-            {"name": "Maggi 2-Minute Noodles 70g", "barcode": "8901058852394", "category": "Instant Food", "price": 13.5, "stock": 75},
-            {"name": "Aashirvaad Shudh Chakki Atta 5kg", "barcode": "8901725181223", "category": "Grocery", "price": 240.0, "stock": 16},
-            {"name": "Lays Magic Masala 50g", "barcode": "8901491001223", "category": "Snacks", "price": 20.0, "stock": 60},
+            {
+                "name": "Maggi 2-Minute Noodles 70g",
+                "barcode": "8901058852394",
+                "category": "Instant Food",
+                "brand": "Nestle",
+                "price": 13.5,
+                "stock": 75,
+                "floor": "Ground Floor",
+                "section": "Instant Food",
+                "aisle": "Aisle 1",
+                "rack_number": "Rack A-01"
+            },
+            {
+                "name": "Puma Regular Fit T-Shirt",
+                "barcode": "8901262010999",
+                "category": "Clothing",
+                "brand": "Puma",
+                "size": "M",
+                "available_sizes": "S, M, L",
+                "price": 1399.0,
+                "stock": 20,
+                "floor": "2nd Floor",
+                "section": "Fashion Mart",
+                "aisle": "Aisle 3",
+                "rack_number": "Rack P-10"
+            },
+            {
+                "name": "Aashirvaad Shudh Chakki Atta 5kg",
+                "barcode": "8901725181223",
+                "category": "Grocery",
+                "brand": "Aashirvaad",
+                "price": 240.0,
+                "stock": 16,
+                "floor": "Ground Floor",
+                "section": "Staples",
+                "aisle": "Aisle 4",
+                "rack_number": "Rack S-03"
+            },
+            {
+                "name": "Lays Magic Masala 50g",
+                "barcode": "8901491001223",
+                "category": "Snacks",
+                "brand": "Lays",
+                "price": 20.0,
+                "stock": 60,
+                "floor": "Ground Floor",
+                "section": "Snacks",
+                "aisle": "Aisle 2",
+                "rack_number": "Rack L-01"
+            },
         ]
         for p_data in nearby_2_products:
             p = db.query(models.Product).filter(
@@ -258,8 +470,15 @@ def seed(db=None):
                 db.add(models.Product(
                     user_id="store_nearby_2",
                     name=p_data["name"],
-                    barcode=p_data["barcode"],
-                    category=p_data["category"],
+                    barcode=p_data.get("barcode"),
+                    category=p_data.get("category", "General"),
+                    brand=p_data.get("brand"),
+                    size=p_data.get("size"),
+                    available_sizes=p_data.get("available_sizes"),
+                    floor=p_data.get("floor", "Ground Floor"),
+                    section=p_data.get("section", "General Retail"),
+                    aisle=p_data.get("aisle", "Aisle 1"),
+                    rack_number=p_data.get("rack_number", "Rack R-01"),
                     price=p_data["price"],
                     stock=p_data["stock"],
                     updated_at=datetime.utcnow() - timedelta(hours=1)
@@ -267,11 +486,37 @@ def seed(db=None):
             else:
                 p.stock = p_data["stock"]
                 p.price = p_data["price"]
+                p.floor = p_data.get("floor", p.floor)
+                p.section = p_data.get("section", p.section)
+                p.aisle = p_data.get("aisle", p.aisle)
+                p.rack_number = p_data.get("rack_number", p.rack_number)
 
         # Partner Store 3 (Reliance Smart Point - 2.6 km away)
         nearby_3_products = [
-            {"name": "Maggi 2-Minute Noodles 70g", "barcode": "8901058852394", "category": "Instant Food", "price": 14.0, "stock": 110},
-            {"name": "Tata Tea Gold 500g", "barcode": "8901072001556", "category": "Beverages", "price": 310.0, "stock": 25},
+            {
+                "name": "Maggi 2-Minute Noodles 70g",
+                "barcode": "8901058852394",
+                "category": "Instant Food",
+                "brand": "Nestle",
+                "price": 14.0,
+                "stock": 110,
+                "floor": "Ground Floor",
+                "section": "Instant Food",
+                "aisle": "Aisle 5",
+                "rack_number": "Rack R-06"
+            },
+            {
+                "name": "Tata Tea Gold 500g",
+                "barcode": "8901072001556",
+                "category": "Beverages",
+                "brand": "Tata Tea",
+                "price": 310.0,
+                "stock": 25,
+                "floor": "Ground Floor",
+                "section": "Tea & Coffee",
+                "aisle": "Aisle 3",
+                "rack_number": "Rack T-02"
+            },
         ]
         for p_data in nearby_3_products:
             p = db.query(models.Product).filter(
@@ -282,8 +527,15 @@ def seed(db=None):
                 db.add(models.Product(
                     user_id="store_nearby_3",
                     name=p_data["name"],
-                    barcode=p_data["barcode"],
-                    category=p_data["category"],
+                    barcode=p_data.get("barcode"),
+                    category=p_data.get("category", "General"),
+                    brand=p_data.get("brand"),
+                    size=p_data.get("size"),
+                    available_sizes=p_data.get("available_sizes"),
+                    floor=p_data.get("floor", "Ground Floor"),
+                    section=p_data.get("section", "General Retail"),
+                    aisle=p_data.get("aisle", "Aisle 1"),
+                    rack_number=p_data.get("rack_number", "Rack R-01"),
                     price=p_data["price"],
                     stock=p_data["stock"],
                     updated_at=datetime.utcnow() - timedelta(hours=3)
@@ -291,6 +543,10 @@ def seed(db=None):
             else:
                 p.stock = p_data["stock"]
                 p.price = p_data["price"]
+                p.floor = p_data.get("floor", p.floor)
+                p.section = p_data.get("section", p.section)
+                p.aisle = p_data.get("aisle", p.aisle)
+                p.rack_number = p_data.get("rack_number", p.rack_number)
 
         db.commit()
         print("[SUCCESS] Demo seeding completed successfully!")

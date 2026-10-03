@@ -262,29 +262,34 @@ def get_nearby_products(
     user_id: CurrentUser,
     db: Session = Depends(get_db)
 ):
-    # 1. Get current store product
+    # 1. Get current store product with fallback
     product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
     ).first()
+    if not product:
+        product = db.query(models.Product).filter(models.Product.id == product_id).first()
     
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found in your store")
+        raise HTTPException(status_code=404, detail="Product not found")
         
     # 2. Get current store location
     current_store = db.query(models.StoreProfile).filter(models.StoreProfile.user_id == user_id).first()
-    curr_lat = current_store.latitude if current_store else None
-    curr_lon = current_store.longitude if current_store else None
+    if not current_store and product.user_id:
+        current_store = db.query(models.StoreProfile).filter(models.StoreProfile.user_id == product.user_id).first()
+    curr_lat = current_store.latitude if (current_store and current_store.latitude is not None) else 12.9716
+    curr_lon = current_store.longitude if (current_store and current_store.longitude is not None) else 77.5946
     
     # 3. Match other products (Barcode prioritized, else Name)
+    target_prod_uid = product.user_id if product.user_id else user_id
     query = db.query(models.Product, models.StoreProfile).join(
         models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
-    ).filter(models.Product.user_id != user_id)
+    ).filter(models.Product.user_id != target_prod_uid)
     
     if product.barcode:
         query = query.filter(models.Product.barcode == product.barcode)
     else:
-        query = query.filter(models.Product.name == product.name)
+        query = query.filter(models.Product.name.ilike(f"%{product.name}%"))
         
     alternatives = query.all()
     
@@ -302,7 +307,11 @@ def get_nearby_products(
             "available": p.stock > 0,
             "price": p.price,
             "distance_km": dist,
-            "last_updated": get_time_ago_str(p.updated_at)
+            "last_updated": get_time_ago_str(p.updated_at),
+            "floor": getattr(p, "floor", None),
+            "section": getattr(p, "section", None),
+            "aisle": getattr(p, "aisle", None),
+            "rack_number": getattr(p, "rack_number", None)
         })
         
     # 5. Sort: Available first, then distance (if possible), then price

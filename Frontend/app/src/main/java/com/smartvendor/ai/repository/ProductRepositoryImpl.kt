@@ -15,16 +15,6 @@ class ProductRepositoryImpl : ProductRepository {
 
     // ─── Map API response → domain model ──────────────────────────────────────
 
-    private fun ProductResponse.toDomain() = Product(
-        id = id,
-        name = name,
-        barcode = barcode ?: "",
-        category = category,
-        price = price,
-        stock = stock,
-        lowStockThreshold = lowStockThreshold,
-        imageUrl = imageUrl ?: ""
-    )
 
     // ─── Interface implementations ─────────────────────────────────────────────
 
@@ -44,25 +34,265 @@ class ProductRepositoryImpl : ProductRepository {
         }
     }
 
-    private val masterCatalog = listOf(
-        // Hackathon Demo Items
-        Product(id = "maggi", name = "Maggi 2-Minute Masala Noodles", price = 14.0, stock = 100, category = "Instant Foods", barcode = "8901058852311"),
-        Product(id = "oreo", name = "Cadbury Oreo Original Biscuits", price = 35.0, stock = 100, category = "Snacks & Biscuits", barcode = "7622201737018"),
-        Product(id = "amul_ice_cream", name = "Amul Ice Cream Cup Vanilla Magic 100ml", price = 30.0, stock = 100, category = "Dairy & Bakery", barcode = "8901262010014"),
-        Product(id = "cake", name = "Britannia Cake Gobbles Choco Chill 65g", price = 30.0, stock = 100, category = "Dairy & Bakery", barcode = "8901063142018"),
-        Product(id = "cerave", name = "CeraVe Hydrating Cleanser 236ml", price = 900.0, stock = 100, category = "Personal Care", barcode = "3337875597371"),
-        Product(id = "hns_shampoo", name = "Head & Shoulders Cool Menthol Shampoo 180ml", price = 250.0, stock = 100, category = "Personal Care", barcode = "4902430730013"),
-        Product(id = "nestle_milk_powder", name = "Nestle Everyday Dairy Whitener 20g", price = 10.0, stock = 100, category = "Dairy & Beverages", barcode = "8901058852314"),
-        Product(id = "plum", name = "Plum Green Tea Pore Cleansing Face Wash 100ml", price = 350.0, stock = 100, category = "Personal Care", barcode = "8906118410214"),
-        Product(id = "thums_up", name = "Thums Up Charged Carbonated Beverage 250ml", price = 20.0, stock = 100, category = "Beverages", barcode = "8901764012211"),
-        Product(id = "wild_stone", name = "Wild Stone Forest Spice Deodorant Soap 125g", price = 70.0, stock = 100, category = "Personal Care", barcode = "8904006304218"),
-        Product(id = "bourbon_biscuit", name = "Britannia Bourbon Chocolate Biscuits", price = 30.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901063012014"),
-        Product(id = "milky_biscuit", name = "Britannia Milk Bikis Biscuits", price = 20.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901063141011"),
-        Product(id = "surf_excel", name = "Surf Excel Easy Wash Detergent 1kg", price = 120.0, stock = 100, category = "Laundry & Household", barcode = "8901030012015"),
-        Product(id = "hide_and_seek", name = "Parle Hide & Seek Choco Chip Biscuits", price = 30.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901719101014"),
-        Product(id = "appe_fizz", name = "Appy Fizz Sparkling Apple Juice 160ml", price = 35.0, stock = 100, category = "Beverages", barcode = "8902579100018"),
-        Product(id = "jim_jam", name = "Britannia Treat Jim Jam Biscuits", price = 35.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901063015015"),
-        Product(id = "nivea_deodorant", name = "Nivea Men Fresh Active Deodorant 150ml", price = 199.0, stock = 100, category = "Personal Care", barcode = "4005808816033"),
+    companion object {
+        @Volatile var cachedProducts: List<Product> = emptyList()
+        @Volatile var isLoaded: Boolean = false
+
+        val masterCatalog = listOf(
+        // Flagship Hackathon Cross-Category Showcases
+        Product(
+            id = "puma_tshirt",
+            name = "Puma Regular Fit T-Shirt",
+            price = 1499.0,
+            stock = 12,
+            category = "Clothing",
+            brand = "Puma",
+            size = "M",
+            availableSizes = "S, M, L, XL",
+            floor = "1st Floor",
+            section = "Fashion Section",
+            aisle = "Aisle 4",
+            rackNumber = "Rack A-12",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901262010999"
+        ),
+        Product(
+            id = "nike_shoes",
+            name = "Nike Revolution 6 Running Shoes",
+            price = 3695.0,
+            stock = 8,
+            category = "Footwear",
+            brand = "Nike",
+            size = "UK-8",
+            availableSizes = "UK-7, UK-8, UK-9",
+            floor = "2nd Floor",
+            section = "Footwear Section",
+            aisle = "Aisle 1",
+            rackNumber = "Rack F-07",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901262010998"
+        ),
+        Product(
+            id = "boat_headphones",
+            name = "boAt Rockerz 450 Bluetooth Headphones",
+            price = 1499.0,
+            stock = 20,
+            category = "Electronics",
+            brand = "boAt",
+            floor = "Ground Floor",
+            section = "Electronics & Audio",
+            aisle = "Aisle 6",
+            rackNumber = "Rack E-03",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901262010997"
+        ),
+        Product(
+            id = "nivia_football",
+            name = "Nivia Storm Football Size 5",
+            price = 549.0,
+            stock = 15,
+            category = "Sports",
+            brand = "Nivia",
+            size = "Size 5",
+            availableSizes = "Size 4, Size 5",
+            floor = "2nd Floor",
+            section = "Sports & Fitness",
+            aisle = "Aisle 5",
+            rackNumber = "Rack S-02",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901262010996"
+        ),
+        Product(
+            id = "milton_flask",
+            name = "Milton Thermosteel Flip Lid Flask 1000ml",
+            price = 999.0,
+            stock = 22,
+            category = "Home",
+            brand = "Milton",
+            floor = "1st Floor",
+            section = "Home & Kitchen",
+            aisle = "Aisle 7",
+            rackNumber = "Rack H-08",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901262010995"
+        ),
+
+        // Hackathon Retail Dataset Packshots with Location Metadata
+        Product(
+            id = "maggi",
+            name = "Maggi 2-Minute Masala Noodles",
+            price = 14.0,
+            stock = 0, // Out of stock to demonstrate Find Elsewhere
+            category = "Instant Foods",
+            brand = "Nestle",
+            floor = "Ground Floor",
+            section = "Instant Foods",
+            aisle = "Aisle 3",
+            rackNumber = "Rack G-02",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901058852311"
+        ),
+        Product(
+            id = "beardo",
+            name = "Beardo Mariner Eau De Parfum 50ml",
+            price = 799.0,
+            stock = 45,
+            category = "Personal Care",
+            brand = "Beardo",
+            floor = "Ground Floor",
+            section = "Personal Care",
+            aisle = "Aisle 3",
+            rackNumber = "Rack P-05",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8906084796773"
+        ),
+        Product(
+            id = "beardo_alt",
+            name = "Beardo Mariner Perfume 50ml (Alt SKU)",
+            price = 799.0,
+            stock = 25,
+            category = "Personal Care",
+            brand = "Beardo",
+            floor = "Ground Floor",
+            section = "Personal Care",
+            aisle = "Aisle 3",
+            rackNumber = "Rack P-05",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8906084795998"
+        ),
+        Product(
+            id = "amul_ice_cream",
+            name = "Amul Ice Cream Cup Vanilla Magic 100ml",
+            price = 30.0,
+            stock = 100,
+            category = "Dairy & Bakery",
+            brand = "Amul",
+            floor = "Ground Floor",
+            section = "Dairy & Frozen",
+            aisle = "Freezer Bay 1",
+            rackNumber = "Rack D-01",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901262010014"
+        ),
+        Product(
+            id = "thums_up",
+            name = "Thums Up Charged Carbonated Beverage 250ml",
+            price = 20.0,
+            stock = 100,
+            category = "Beverages",
+            brand = "Thums Up",
+            floor = "Ground Floor",
+            section = "Cold Beverages",
+            aisle = "Chiller 2",
+            rackNumber = "Rack B-04",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901764012211"
+        ),
+        Product(
+            id = "wild_stone",
+            name = "Wild Stone Forest Spice Deodorant Soap 125g",
+            price = 70.0,
+            stock = 100,
+            category = "Personal Care",
+            brand = "Wild Stone",
+            floor = "Ground Floor",
+            section = "Personal Care",
+            aisle = "Aisle 3",
+            rackNumber = "Rack P-03",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8904006304218"
+        ),
+        Product(
+            id = "oreo",
+            name = "Cadbury Oreo Original Biscuits",
+            price = 35.0,
+            stock = 100,
+            category = "Snacks & Biscuits",
+            brand = "Cadbury",
+            floor = "Ground Floor",
+            section = "Snacks & Biscuits",
+            aisle = "Aisle 2",
+            rackNumber = "Rack S-04",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "7622201737018"
+        ),
+        Product(
+            id = "cake",
+            name = "Britannia Cake Gobbles Choco Chill 65g",
+            price = 30.0,
+            stock = 100,
+            category = "Dairy & Bakery",
+            brand = "Britannia",
+            floor = "Ground Floor",
+            section = "Bakery",
+            aisle = "Aisle 2",
+            rackNumber = "Rack S-06",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901063142018"
+        ),
+        Product(
+            id = "cerave",
+            name = "CeraVe Hydrating Cleanser 236ml",
+            price = 900.0,
+            stock = 100,
+            category = "Personal Care",
+            brand = "CeraVe",
+            floor = "Ground Floor",
+            section = "Personal Care",
+            aisle = "Aisle 3",
+            rackNumber = "Rack P-01",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "3337875597371"
+        ),
+        Product(
+            id = "hns_shampoo",
+            name = "Head & Shoulders Cool Menthol Shampoo 180ml",
+            price = 250.0,
+            stock = 100,
+            category = "Personal Care",
+            brand = "Head & Shoulders",
+            floor = "Ground Floor",
+            section = "Personal Care",
+            aisle = "Aisle 3",
+            rackNumber = "Rack P-02",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "4902430730013"
+        ),
+        Product(
+            id = "nestle_milk_powder",
+            name = "Nestle Everyday Dairy Whitener 20g",
+            price = 10.0,
+            stock = 100,
+            category = "Dairy & Beverages",
+            brand = "Nestle",
+            floor = "Ground Floor",
+            section = "Dairy",
+            aisle = "Aisle 1",
+            rackNumber = "Rack D-03",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8901058852314"
+        ),
+        Product(
+            id = "plum",
+            name = "Plum Green Tea Pore Cleansing Face Wash 100ml",
+            price = 350.0,
+            stock = 100,
+            category = "Personal Care",
+            brand = "Plum",
+            floor = "Ground Floor",
+            section = "Personal Care",
+            aisle = "Aisle 3",
+            rackNumber = "Rack P-06",
+            storeName = "ScanSnap Express Kirana",
+            barcode = "8906118410214"
+        ),
+        Product(id = "bourbon_biscuit", name = "Britannia Bourbon Chocolate Biscuits", price = 30.0, stock = 100, category = "Snacks & Biscuits", brand = "Britannia", floor = "Ground Floor", section = "Snacks", rackNumber = "Rack S-02", barcode = "8901063012014"),
+        Product(id = "milky_biscuit", name = "Britannia Milk Bikis Biscuits", price = 20.0, stock = 100, category = "Snacks & Biscuits", brand = "Britannia", floor = "Ground Floor", section = "Snacks", rackNumber = "Rack S-03", barcode = "8901063141011"),
+        Product(id = "surf_excel", name = "Surf Excel Easy Wash Detergent 1kg", price = 120.0, stock = 100, category = "Laundry & Household", brand = "Surf Excel", floor = "Ground Floor", section = "Cleaning", rackNumber = "Rack H-01", barcode = "8901030012015"),
+        Product(id = "hide_and_seek", name = "Parle Hide & Seek Choco Chip Biscuits", price = 30.0, stock = 100, category = "Snacks & Biscuits", brand = "Parle", floor = "Ground Floor", section = "Snacks", rackNumber = "Rack S-01", barcode = "8901719101014"),
+        Product(id = "appe_fizz", name = "Appy Fizz Sparkling Apple Juice 160ml", price = 35.0, stock = 100, category = "Beverages", brand = "Parle Agro", floor = "Ground Floor", section = "Beverages", rackNumber = "Rack B-02", barcode = "8902579100018"),
+        Product(id = "jim_jam", name = "Britannia Treat Jim Jam Biscuits", price = 35.0, stock = 100, category = "Snacks & Biscuits", brand = "Britannia", floor = "Ground Floor", section = "Snacks", rackNumber = "Rack S-05", barcode = "8901063015015"),
+        Product(id = "nivea_deodorant", name = "Nivea Men Fresh Active Deodorant 150ml", price = 199.0, stock = 100, category = "Personal Care", brand = "Nivea", floor = "Ground Floor", section = "Personal Care", rackNumber = "Rack P-04", barcode = "4005808816033"),
 
         // Popular Indian FMCG Grocery & Retail Products
         Product(id = "parle_g", name = "Parle-G Original Gluco Biscuits", price = 10.0, stock = 100, category = "Snacks & Biscuits", barcode = "8901719104046"),
@@ -88,6 +318,7 @@ class ProductRepositoryImpl : ProductRepository {
         Product(id = "red_label", name = "Brooke Bond Red Label Tea 250g", price = 135.0, stock = 100, category = "Dairy & Beverages", barcode = "8901058852342"),
         Product(id = "soya_sticks", name = "Soya Sticks Crispy Namkeen 150g", price = 30.0, stock = 100, category = "Snacks & Namkeen", barcode = "8901262010161")
     )
+    }
 
     private fun isBarcodeMatch(b1: String, b2: String): Boolean {
         val s1 = b1.trim()
@@ -220,6 +451,14 @@ class ProductRepositoryImpl : ProductRepository {
                 category = "Personal Care",
                 barcode = clean
             )
+            stripped.startsWith("8906084") -> Product(
+                id = "beardo_$clean",
+                name = "Beardo Mariner Eau De Parfum 50ml",
+                price = 799.0,
+                stock = 45,
+                category = "Personal Care",
+                barcode = clean
+            )
             stripped.startsWith("890") -> Product(
                 id = "retail_$clean",
                 name = "Retail FMCG Pack ($clean)",
@@ -261,29 +500,30 @@ class ProductRepositoryImpl : ProductRepository {
     }
 
     override fun getProductsStream(): Flow<List<Product>> = flow {
-        if (isLoaded) {
+        if (isLoaded && cachedProducts.isNotEmpty()) {
             emit(cachedProducts)
+        } else {
+            emit(masterCatalog)
         }
         try {
             val response = api.getProducts()
-            if (response.isSuccessful) {
-                val list = response.body()?.map { it.toDomain() } ?: emptyList()
+            if (response.isSuccessful && !response.body().isNullOrEmpty()) {
+                val list = response.body()!!.map { it.toDomain() }
                 cachedProducts = list
                 isLoaded = true
                 emit(list)
             } else if (!isLoaded) {
-                emit(emptyList())
+                cachedProducts = masterCatalog
+                isLoaded = true
+                emit(masterCatalog)
             }
         } catch (ex: Exception) {
             if (!isLoaded) {
-                emit(emptyList())
+                cachedProducts = masterCatalog
+                isLoaded = true
+                emit(masterCatalog)
             }
         }
-    }
-
-    companion object {
-        @Volatile var cachedProducts: List<Product> = emptyList()
-        @Volatile var isLoaded: Boolean = false
     }
 
     override suspend fun updateStock(productId: String, targetStock: Int): Result<Unit> {
@@ -368,13 +608,37 @@ class ProductRepositoryImpl : ProductRepository {
     override suspend fun searchMasterCatalog(query: String): Result<List<com.smartvendor.ai.network.models.MasterCatalogResponse>> {
         return try {
             val response = api.searchMasterCatalog(search = query, limit = 20)
-            if (response.isSuccessful) {
-                Result.success(response.body() ?: emptyList())
+            if (response.isSuccessful && !response.body().isNullOrEmpty()) {
+                Result.success(response.body()!!)
             } else {
-                Result.success(emptyList())
+                val qLower = query.lowercase().trim()
+                val localMatches = masterCatalog.filter {
+                    it.name.lowercase().contains(qLower) || it.category.lowercase().contains(qLower)
+                }.map {
+                    com.smartvendor.ai.network.models.MasterCatalogResponse(
+                        id = it.id,
+                        name = it.name,
+                        category = it.category,
+                        suggestedPrice = it.price,
+                        barcode = it.barcode
+                    )
+                }
+                Result.success(localMatches)
             }
         } catch (ex: Exception) {
-            Result.failure(ex)
+            val qLower = query.lowercase().trim()
+            val localMatches = masterCatalog.filter {
+                it.name.lowercase().contains(qLower) || it.category.lowercase().contains(qLower)
+            }.map {
+                com.smartvendor.ai.network.models.MasterCatalogResponse(
+                    id = it.id,
+                    name = it.name,
+                    category = it.category,
+                    suggestedPrice = it.price,
+                    barcode = it.barcode
+                )
+            }
+            Result.success(localMatches)
         }
     }
 }

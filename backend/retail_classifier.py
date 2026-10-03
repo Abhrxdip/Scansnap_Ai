@@ -44,7 +44,9 @@ def get_indexed_descriptors():
 
     orb, _ = _get_detector_and_matcher()
     backend_dir = Path(__file__).resolve().parent
-    dataset_dir = backend_dir.parent / "Dataset"
+    dataset_dir = backend_dir / "Dataset"
+    if not dataset_dir.exists():
+        dataset_dir = backend_dir.parent / "Dataset"
 
     indexed: Dict[str, List[Tuple[str, np.ndarray]]] = {}
 

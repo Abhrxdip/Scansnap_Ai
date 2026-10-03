@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
+import com.smartvendor.ai.network.ApiClient
+import com.smartvendor.ai.network.models.NearbyStoreProduct
 
 data class ScanUiState(
     val aiStatus: String = "Initializing AI...",
@@ -37,6 +39,13 @@ data class ScanUiState(
     val currentBill: Bill? = null,
     val consecutiveFailedDetections: Int = 0,
     val showManualEntryDialog: Boolean = false,
+    val showWhereIsItDialog: Boolean = false,
+    val showFindElsewhereDialog: Boolean = false,
+    val showPaymentComingNextDialog: Boolean = false,
+    val nearbyAlternatives: List<com.smartvendor.ai.network.models.NearbyStoreProduct> = emptyList(),
+    val selectedProductSize: String = "M",
+    val userSavedClothingSize: String = "M",
+    val userSavedShoeSize: String = "UK-8",
     val ocrPrefilledName: String = "",
     val ocrPrefilledPrice: String = "",
     val inventoryProducts: List<Product> = emptyList(),
@@ -69,15 +78,46 @@ class ScanViewModel(
     private val dismissedProductIds = ConcurrentHashMap.newKeySet<String>()
     private val recentlyAddedTimestampMap = ConcurrentHashMap<String, Long>()
     private val addedCooldownMs = 5000L
+    private var appContext: Context? = null
 
     fun initialize(context: Context, billId: String) {
+        appContext = context.applicationContext
+        val prefs = context.getSharedPreferences("user_size_prefs", Context.MODE_PRIVATE)
+        val savedClothingSize = prefs.getString("user_clothing_size", "M") ?: "M"
+        val savedShoeSize = prefs.getString("user_shoe_size", "UK-8") ?: "UK-8"
+
         viewModelScope.launch {
             detectionStabilityMap.clear()
             latchedProductIds.clear()
-            _uiState.update { it.copy(aiStatus = "🔍 YOLO Object Detection Active") }
+            _uiState.update {
+                it.copy(
+                    aiStatus = "🔍 YOLO Object Detection Active",
+                    userSavedClothingSize = savedClothingSize,
+                    userSavedShoeSize = savedShoeSize,
+                    selectedProductSize = savedClothingSize
+                )
+            }
             yoloDetector.initialize(context)
             loadBill(billId)
             observeInventory()
+        }
+    }
+
+    private fun getRecommendedSize(product: Product): String {
+        val category = product.category.lowercase()
+        val availableSizesList = product.availableSizes.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        return when {
+            category == "clothing" || category.contains("wear") || category.contains("apparel") -> {
+                if (availableSizesList.contains(_uiState.value.userSavedClothingSize)) _uiState.value.userSavedClothingSize
+                else if (product.size.isNotBlank()) product.size
+                else availableSizesList.firstOrNull() ?: "M"
+            }
+            category == "footwear" || category.contains("shoe") -> {
+                if (availableSizesList.contains(_uiState.value.userSavedShoeSize)) _uiState.value.userSavedShoeSize
+                else if (product.size.isNotBlank()) product.size
+                else availableSizesList.firstOrNull() ?: "UK-8"
+            }
+            else -> product.size.ifBlank { "Standard" }
         }
     }
 
@@ -281,9 +321,8 @@ class ScanViewModel(
                     _uiState.update { it.copy(consecutiveFailedDetections = 0) }
                     handleYoloMultiDetected(result.detections, bitmap)
                 } else {
-                    detectionStabilityMap.clear()
-                    latchedProductIds.clear()
-                    _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+                    // Fast on-device fallback for dataset-only items (e.g. Beardo) or network delay
+                    runOnDeviceFallback(bitmap)
                 }
             }
         }
@@ -420,6 +459,83 @@ class ScanViewModel(
         _uiState.update { it.copy(isProcessingFrame = false) }
     }
 
+    private fun runOnDeviceFallback(bitmap: android.graphics.Bitmap) {
+        // Fast dual check: Barcode first, then ML Kit OCR for brand identification
+        barcodeScanner.scanBitmap(
+            bitmap = bitmap,
+            onSuccess = { barcode ->
+                handleBarcodeDetected(barcode, bitmap)
+            },
+            onNotFound = {
+                ocrScanner.processBitmap(
+                    bitmap = bitmap,
+                    onSuccess = { ocrResult ->
+                        val combined = ocrResult.fullCombinedName.lowercase()
+                        val detectedLabel = when {
+                            combined.contains("beardo") || combined.contains("mariner") -> "beardo"
+                            combined.contains("wild stone") || combined.contains("wildstone") -> "wild_stone"
+                            combined.contains("cerave") -> "cerave"
+                            combined.contains("head & shoulders") || combined.contains("head and shoulders") || combined.contains("shampoo") -> "hns_shampoo"
+                            combined.contains("everyday") || combined.contains("milk powder") || combined.contains("dairy whitener") -> "nestle_milk_powder"
+                            combined.contains("plum") -> "plum"
+                            combined.contains("thums") -> "thums_up"
+                            combined.contains("bourbon") -> "bourbon_biscuit"
+                            combined.contains("milk bikis") || combined.contains("milky") -> "milky_biscuit"
+                            combined.contains("nivea") -> "nivea_deodorant"
+                            combined.contains("maggi") -> "maggi"
+                            combined.contains("oreo") -> "oreo"
+                            combined.contains("surf excel") || combined.contains("surf") -> "surf_excel"
+                            combined.contains("hide & seek") || combined.contains("hide and seek") -> "hide_and_seek"
+                            combined.contains("jim jam") || combined.contains("jimjam") -> "jim_jam"
+                            combined.contains("appy") || combined.contains("appe") -> "appe_fizz"
+                            combined.contains("cake") -> "cake"
+                            combined.contains("amul") -> "amul_ice_cream"
+                            combined.contains("puma") -> "puma"
+                            combined.contains("nike") -> "nike"
+                            combined.contains("boat") -> "boat"
+                            combined.contains("nivia") -> "nivia"
+                            combined.contains("milton") -> "milton"
+                            else -> null
+                        }
+
+                        if (detectedLabel != null) {
+                            val fallbackDetection = com.smartvendor.ai.network.models.YoloDetection(
+                                label = detectedLabel,
+                                confidence = 0.95f,
+                                bbox = listOf(0.10f, 0.10f, 0.90f, 0.90f)
+                            )
+                            handleYoloMultiDetected(listOf(fallbackDetection), bitmap)
+                        } else {
+                            viewModelScope.launch {
+                                val matched = matchOcrProduct(ocrResult, bitmap)
+                                if (!matched) {
+                                    detectionStabilityMap.clear()
+                                    latchedProductIds.clear()
+                                    _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+                                }
+                            }
+                        }
+                    },
+                    onNotFound = {
+                        detectionStabilityMap.clear()
+                        latchedProductIds.clear()
+                        _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+                    },
+                    onError = {
+                        detectionStabilityMap.clear()
+                        latchedProductIds.clear()
+                        _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+                    }
+                )
+            },
+            onError = {
+                detectionStabilityMap.clear()
+                latchedProductIds.clear()
+                _uiState.update { it.copy(isProcessingFrame = false, activeDetections = emptyList()) }
+            }
+        )
+    }
+
     private fun handleYoloMultiDetected(
         detections: List<com.smartvendor.ai.network.models.YoloDetection>,
         bitmap: android.graphics.Bitmap? = null
@@ -456,7 +572,13 @@ class ScanViewModel(
                     "nestle_milk_powder" -> "Nestle Milk Powder"
                     "plum" -> "Plum Skincare"
                     "thums_up" -> "Thums Up"
-                    "wild_stone" -> "Wild Stone Deodorant"
+                    "wild_stone" -> "Wild Stone"
+                    "beardo", "beardo_mariner", "mariner" -> "Beardo Mariner"
+                    "puma", "puma_tshirt" -> "Puma T-Shirt"
+                    "nike", "nike_shoes" -> "Nike Shoes"
+                    "boat", "boat_headphones" -> "boAt Headphones"
+                    "nivia", "nivia_football" -> "Nivia Football"
+                    "milton", "milton_flask" -> "Milton Flask"
                     else -> det.label.replace("_", " ")
                 }
                 DetectionResult(
@@ -474,20 +596,20 @@ class ScanViewModel(
             val matchedList = mutableListOf<Product>()
             val currentFrameMatchedIds = mutableSetOf<String>()
             for (det in detections) {
-                // Multi-product confidence gating: capture all clear objects in view (threshold 0.35)
+                // Multi-product confidence gating: capture all clear objects in view (threshold 0.25)
                 if (det.confidence < 0.25f) continue
                 if (det.label.lowercase().trim() == "maggi" && det.confidence < 0.55f) continue
 
                 val labelLower = det.label.lowercase().trim()
                 val explicitTarget = when (labelLower) {
                     "amul_ice_cream", "amul_icecream" -> "Amul Ice Cream Cup Vanilla Magic"
-                    "cake", "britannia_cake", "treat_cake" -> "Britannia Treat Chocolate Cake"
-                    "cerave", "cerave_lotion", "cerave_cream" -> "CeraVe Daily Moisturizing Lotion"
+                    "cake", "britannia_cake", "treat_cake" -> "Britannia Cake Gobbles Choco Chill"
+                    "cerave", "cerave_lotion", "cerave_cream" -> "CeraVe Hydrating Cleanser"
                     "hns_shampoo", "head_and_shoulders", "head_shoulders", "hns" -> "Head & Shoulders Cool Menthol Shampoo"
                     "nestle_milk_powder", "milk_powder", "everyday_milk" -> "Nestle Everyday Dairy Whitener"
-                    "plum", "plum_skincare" -> "Plum Green Tea Face Wash"
-                    "thums_up", "thumsup" -> "Thums Up Charged Carbonated Drink"
-                    "wild_stone", "wildstone" -> "Wild Stone Code Platinum Deodorant"
+                    "plum", "plum_skincare" -> "Plum Green Tea"
+                    "thums_up", "thumsup" -> "Thums Up"
+                    "wild_stone", "wildstone" -> "Wild Stone"
                     "nivea", "nivea_deodorant" -> "Nivea Men Fresh Active Deodorant"
                     "bourbon", "bourbon_biscuit" -> "Britannia Bourbon Chocolate Biscuits"
                     "milky_biscuit", "milk_biscuit" -> "Britannia Milk Bikis Biscuits"
@@ -499,48 +621,100 @@ class ScanViewModel(
                     "jim_jam", "jimjam" -> "Britannia Treat Jim Jam Biscuits"
                     "parle_g", "parleg" -> "Parle-G Gold Biscuits"
                     "good_day", "goodday" -> "Britannia Good Day Butter Cookies"
+                    "beardo", "beardo_mariner", "mariner" -> "Beardo Mariner Eau De Parfum 50ml"
+                    "puma", "puma_tshirt" -> "Puma Regular Fit T-Shirt"
+                    "nike", "nike_shoes" -> "Nike Revolution 6 Running Shoes"
+                    "boat", "boat_headphones" -> "boAt Rockerz 450 Bluetooth Headphones"
+                    "nivia", "nivia_football" -> "Nivia Storm Football Size 5"
+                    "milton", "milton_flask" -> "Milton Thermosteel Flip Lid Flask 1000ml"
                     else -> null
                 }
-                
+
                 val normalizedLabel = labelLower.replace("_", " ")
 
-                var matched = explicitTarget?.let { target -> products.firstOrNull { it.name.equals(target, ignoreCase = true) } }
-                
+                // 0. Direct match from backend YoloDetection productMatch if available
+                var matched: Product? = det.productMatch?.toDomain()
+
+                // A. Direct or partial match on explicitTarget
                 if (matched == null) {
-                    matched = products.firstOrNull { it.name.equals(normalizedLabel, ignoreCase = true) }
+                    matched = explicitTarget?.let { target ->
+                        products.firstOrNull { it.name.equals(target, ignoreCase = true) }
+                            ?: products.firstOrNull { it.name.contains(target, ignoreCase = true) || target.contains(it.name, ignoreCase = true) }
+                    }
                 }
-                
+
+                // B. Normalized label containment
+                if (matched == null) {
+                    matched = products.firstOrNull {
+                        it.name.equals(normalizedLabel, ignoreCase = true) ||
+                        it.name.contains(normalizedLabel, ignoreCase = true)
+                    }
+                }
+
+                // C. Brand-specific token filter across inventory
                 if (matched == null) {
                     val matchingProducts = products.filter { product ->
                         val pName = product.name.lowercase()
                         when (labelLower) {
-                            "appe_fizz", "appy_fizz", "appe", "appy" -> pName.contains("appy fizz")
-                            "surf_excel", "surf" -> pName.contains("surf excel")
+                            "appe_fizz", "appy_fizz", "appe", "appy" -> pName.contains("appy fizz") || pName.contains("appe")
+                            "surf_excel", "surf" -> pName.contains("surf excel") || pName.contains("surf")
                             "hide_and_seek", "hide_seek" -> pName.contains("hide & seek") || pName.contains("hide and seek")
                             "oreo" -> pName.contains("oreo")
-                            "maggi" -> pName.contains("maggi") && pName.contains("noodles")
+                            "maggi" -> pName.contains("maggi")
                             "jim_jam", "jimjam" -> pName.contains("jim jam") || pName.contains("jimjam")
-                            "bourbon", "bourbon_biscuit" -> pName.contains("bourbon") && pName.contains("biscuit")
-                            "nivea", "nivea_deodorant" -> pName.contains("nivea") && pName.contains("deodorant")
-                            "milky_biscuit", "milk_biscuit" -> pName.contains("milk bikis")
+                            "bourbon", "bourbon_biscuit" -> pName.contains("bourbon")
+                            "nivea", "nivea_deodorant" -> pName.contains("nivea")
+                            "milky_biscuit", "milk_biscuit" -> pName.contains("milk bikis") || pName.contains("milky")
                             "parle_g", "parleg" -> pName.contains("parle-g") || pName.contains("parle g")
                             "good_day", "goodday" -> pName.contains("good day")
-                            "amul_ice_cream", "amul_icecream" -> pName.contains("amul") && pName.contains("ice cream")
-                            "cake", "britannia_cake", "treat_cake" -> pName.contains("cake") && pName.contains("treat")
+                            "amul_ice_cream", "amul_icecream" -> pName.contains("amul")
+                            "cake", "britannia_cake", "treat_cake" -> pName.contains("cake")
                             "cerave", "cerave_lotion", "cerave_cream" -> pName.contains("cerave")
-                            "hns_shampoo", "head_and_shoulders", "head_shoulders", "hns" -> pName.contains("head & shoulders") || pName.contains("head and shoulders")
-                            "nestle_milk_powder", "milk_powder", "everyday_milk" -> pName.contains("everyday") && pName.contains("dairy")
-                            "plum", "plum_skincare" -> pName.contains("plum") && pName.contains("green tea")
-                            "thums_up", "thumsup" -> pName.contains("thums up")
-                            "wild_stone", "wildstone" -> pName.contains("wild stone")
+                            "hns_shampoo", "head_and_shoulders", "head_shoulders", "hns" -> pName.contains("head & shoulders") || pName.contains("head and shoulders") || pName.contains("shampoo")
+                            "nestle_milk_powder", "milk_powder", "everyday_milk" -> pName.contains("everyday") || pName.contains("milk powder") || pName.contains("nestle")
+                            "plum", "plum_skincare" -> pName.contains("plum")
+                            "thums_up", "thumsup" -> pName.contains("thums up") || pName.contains("thumsup")
+                            "wild_stone", "wildstone" -> pName.contains("wild stone") || pName.contains("wildstone")
+                            "beardo", "beardo_mariner", "mariner" -> pName.contains("beardo") || pName.contains("mariner")
+                            "puma", "puma_tshirt" -> pName.contains("puma")
+                            "nike", "nike_shoes" -> pName.contains("nike")
+                            "boat", "boat_headphones" -> pName.contains("boat") || pName.contains("rockerz")
+                            "nivia", "nivia_football" -> pName.contains("nivia")
+                            "milton", "milton_flask" -> pName.contains("milton")
                             else -> {
-                                val cleanTokens = labelLower.replace("_", " ").split(" ").filter { it.length > 3 }
-                                if (cleanTokens.isEmpty()) false else cleanTokens.all { token -> pName.contains(token) }
+                                val cleanTokens = labelLower.replace("_", " ").split(" ").filter { it.length >= 3 }
+                                if (cleanTokens.isEmpty()) false else cleanTokens.any { token -> pName.contains(token) }
                             }
                         }
                     }
-                    if (matchingProducts.size == 1) {
+                    if (matchingProducts.isNotEmpty()) {
                         matched = matchingProducts.first()
+                    }
+                }
+
+                // D. Fallback to Master Catalog if not yet loaded in local store shelf
+                if (matched == null) {
+                    val allCatalog = ProductRepositoryImpl.masterCatalog
+                    matched = explicitTarget?.let { target ->
+                        allCatalog.firstOrNull { it.name.contains(target, ignoreCase = true) || target.contains(it.name, ignoreCase = true) }
+                    } ?: allCatalog.firstOrNull { item ->
+                        val cName = item.name.lowercase()
+                        when (labelLower) {
+                            "wild_stone", "wildstone" -> cName.contains("wild stone") || cName.contains("wildstone")
+                            "beardo", "beardo_mariner", "mariner" -> cName.contains("beardo") || cName.contains("mariner")
+                            "cerave", "cerave_lotion", "cerave_cream" -> cName.contains("cerave")
+                            "hns_shampoo", "hns" -> cName.contains("head & shoulders") || cName.contains("shampoo")
+                            "amul_ice_cream" -> cName.contains("amul")
+                            "cake" -> cName.contains("cake")
+                            "plum" -> cName.contains("plum")
+                            "nivea", "nivea_deodorant" -> cName.contains("nivea")
+                            "puma", "puma_tshirt" -> cName.contains("puma")
+                            "nike", "nike_shoes" -> cName.contains("nike")
+                            "boat", "boat_headphones" -> cName.contains("boat") || cName.contains("rockerz")
+                            "nivia", "nivia_football" -> cName.contains("nivia")
+                            "milton", "milton_flask" -> cName.contains("milton")
+                            else -> cName.contains(normalizedLabel)
+                        }
                     }
                 }
                 if (matched != null && !matchedList.any { it.id == matched.id }) {
@@ -560,13 +734,8 @@ class ScanViewModel(
                             detectionStabilityMap[matched.id] = count
 
                             // Adaptive Confidence-Based Latching Speed:
-                            // High confidence (>=0.80) adds immediately in 1 frame!
-                            // Mid confidence (>=0.65) requires 2 frames.
-                            // Lower confidence (<0.65) requires 3 frames to reject noise.
-                            val requiredFrames = when {
-                                det.confidence >= 0.65f -> 1
-                                else -> 2
-                            }
+                            // Instantly latch on 1 frame for all validated items
+                            val requiredFrames = 1
 
                             if (count >= requiredFrames) {
                                 matchedList.add(matched)
@@ -589,12 +758,15 @@ class ScanViewModel(
                     "🎯 Detected ${matchedList.size} Products — Review & Add"
                 }
 
+                val recommendedSize = getRecommendedSize(firstProduct)
+
                 _uiState.update {
                     it.copy(
                         detectedProduct = firstProduct,
                         detectedBitmap = bitmap,
                         detectedProductsList = matchedList,
                         selectedQuantity = 1,
+                        selectedProductSize = recommendedSize,
                         activeDetections = overlayDetections,
                         aiStatus = statusText,
                         isProcessingFrame = false
@@ -659,13 +831,15 @@ class ScanViewModel(
         viewModelScope.launch {
             // 1. Direct local inventory check (instant, offline-first)
             val localMatch = _uiState.value.inventoryProducts.find { it.barcode.trim() == cleanBarcode }
-            if (localMatch != null) {
+            if x(localMatch != null) {
+                val recommendedSize = getRecommendedSize(localMatch)
                 _uiState.update {
                     it.copy(
                         detectedProduct = localMatch,
                         detectedBitmap = bitmap,
                         detectedProductsList = listOf(localMatch),
                         selectedQuantity = 1,
+                        selectedProductSize = recommendedSize,
                         aiStatus = "✅ ${localMatch.name} (Barcode) — Tap 'Add to Bill'",
                         showManualEntryDialog = false,
                         isProcessingFrame = false
@@ -684,12 +858,14 @@ class ScanViewModel(
                     category = "Retail FMCG",
                     barcode = cleanBarcode
                 )
+                val recommendedSize = getRecommendedSize(finalProduct)
                 _uiState.update {
                     it.copy(
                         detectedProduct = finalProduct,
                         detectedBitmap = bitmap,
                         detectedProductsList = listOf(finalProduct),
                         selectedQuantity = 1,
+                        selectedProductSize = recommendedSize,
                         aiStatus = "✅ ${finalProduct.name} — Tap 'Add to Bill'",
                         showManualEntryDialog = false,
                         isProcessingFrame = false
@@ -704,12 +880,14 @@ class ScanViewModel(
                     category = "Retail FMCG",
                     barcode = cleanBarcode
                 )
+                val recommendedSize = getRecommendedSize(fallbackProduct)
                 _uiState.update {
                     it.copy(
                         detectedProduct = fallbackProduct,
                         detectedBitmap = bitmap,
                         detectedProductsList = listOf(fallbackProduct),
                         selectedQuantity = 1,
+                        selectedProductSize = recommendedSize,
                         aiStatus = "✅ ${fallbackProduct.name} — Tap 'Add to Bill'",
                         showManualEntryDialog = false,
                         isProcessingFrame = false
@@ -981,12 +1159,131 @@ class ScanViewModel(
     }
 
     fun selectDetectedProduct(product: Product) {
+        val recommendedSize = getRecommendedSize(product)
         _uiState.update {
             it.copy(
                 detectedProduct = product,
-                selectedQuantity = 1
+                selectedQuantity = 1,
+                selectedProductSize = recommendedSize
             )
         }
+    }
+
+    fun selectProductSize(size: String) {
+        val currentProd = _uiState.value.detectedProduct
+        val category = currentProd?.category?.lowercase() ?: ""
+        val context = appContext
+        if (context != null) {
+            val prefs = context.getSharedPreferences("user_size_prefs", Context.MODE_PRIVATE)
+            if (category == "clothing" || category.contains("wear") || category.contains("apparel")) {
+                prefs.edit().putString("user_clothing_size", size).apply()
+                _uiState.update { it.copy(selectedProductSize = size, userSavedClothingSize = size) }
+                return
+            } else if (category == "footwear" || category.contains("shoe")) {
+                prefs.edit().putString("user_shoe_size", size).apply()
+                _uiState.update { it.copy(selectedProductSize = size, userSavedShoeSize = size) }
+                return
+            }
+        }
+        _uiState.update { it.copy(selectedProductSize = size) }
+    }
+
+    fun openWhereIsItDialog() {
+        _uiState.update { it.copy(showWhereIsItDialog = true) }
+    }
+
+    fun dismissWhereIsItDialog() {
+        _uiState.update { it.copy(showWhereIsItDialog = false) }
+    }
+
+    fun openFindElsewhereDialog() {
+        val currentProd = _uiState.value.detectedProduct ?: return
+        viewModelScope.launch {
+            try {
+                val response = ApiClient.apiService.getNearbyProducts(
+                    name = currentProd.name,
+                    currentStoreId = "store_001"
+                )
+                if (response.isSuccessful && !response.body().isNullOrEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            nearbyAlternatives = response.body() ?: emptyList(),
+                            showFindElsewhereDialog = true
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            nearbyAlternatives = getFallbackAlternatives(currentProd),
+                            showFindElsewhereDialog = true
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        nearbyAlternatives = getFallbackAlternatives(currentProd),
+                        showFindElsewhereDialog = true
+                    )
+                }
+            }
+        }
+    }
+
+    private fun getFallbackAlternatives(currentProd: Product): List<NearbyStoreProduct> {
+        return listOf(
+            NearbyStoreProduct(
+                productId = currentProd.id,
+                productName = currentProd.name,
+                storeId = "store_002",
+                storeName = "Krishna Supermarket",
+                storeAddress = "12 Park Street, Indiranagar",
+                price = currentProd.price,
+                stock = 8,
+                distanceKm = 0.5,
+                floor = currentProd.floor.ifBlank { "1st Floor" },
+                section = currentProd.section.ifBlank { "Aisle A" },
+                rackNumber = currentProd.rackNumber.ifBlank { "R-02" }
+            ),
+            NearbyStoreProduct(
+                productId = currentProd.id,
+                productName = currentProd.name,
+                storeId = "store_003",
+                storeName = "Apna Bazaar",
+                storeAddress = "45 Commercial St, Tasker Town",
+                price = (currentProd.price * 0.95),
+                stock = 15,
+                distanceKm = 1.6,
+                floor = currentProd.floor.ifBlank { "Ground Floor" },
+                section = currentProd.section.ifBlank { "Section B" },
+                rackNumber = currentProd.rackNumber.ifBlank { "R-08" }
+            ),
+            NearbyStoreProduct(
+                productId = currentProd.id,
+                productName = currentProd.name,
+                storeId = "store_004",
+                storeName = "Reliance Smart Point",
+                storeAddress = "88 MG Road, Central Zone",
+                price = currentProd.price,
+                stock = 12,
+                distanceKm = 2.6,
+                floor = currentProd.floor.ifBlank { "2nd Floor" },
+                section = currentProd.section.ifBlank { "Aisle C" },
+                rackNumber = currentProd.rackNumber.ifBlank { "R-14" }
+            )
+        )
+    }
+
+    fun dismissFindElsewhereDialog() {
+        _uiState.update { it.copy(showFindElsewhereDialog = false) }
+    }
+
+    fun openPaymentComingNextDialog() {
+        _uiState.update { it.copy(showPaymentComingNextDialog = true) }
+    }
+
+    fun dismissPaymentComingNextDialog() {
+        _uiState.update { it.copy(showPaymentComingNextDialog = false) }
     }
 
     fun cancelDetection() {

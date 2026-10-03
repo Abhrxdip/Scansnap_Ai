@@ -35,6 +35,13 @@ class ProductCreate(BaseModel):
     name: str
     barcode: Optional[str] = None
     category: str = "General"
+    brand: Optional[str] = None
+    size: Optional[str] = None
+    available_sizes: Optional[str] = None
+    floor: Optional[str] = None
+    section: Optional[str] = None
+    aisle: Optional[str] = None
+    rack_number: Optional[str] = None
     price: float
     stock: int = 0
     low_stock_threshold: int = 5
@@ -45,6 +52,13 @@ class ProductUpdate(BaseModel):
     name: Optional[str] = None
     barcode: Optional[str] = None
     category: Optional[str] = None
+    brand: Optional[str] = None
+    size: Optional[str] = None
+    available_sizes: Optional[str] = None
+    floor: Optional[str] = None
+    section: Optional[str] = None
+    aisle: Optional[str] = None
+    rack_number: Optional[str] = None
     price: Optional[float] = None
     stock: Optional[int] = None
     low_stock_threshold: Optional[int] = None
@@ -59,14 +73,21 @@ class ProductResponse(BaseModel):
     id: str
     user_id: str
     name: str
-    barcode: Optional[str]
+    barcode: Optional[str] = None
     category: str
+    brand: Optional[str] = None
+    size: Optional[str] = None
+    available_sizes: Optional[str] = None
+    floor: Optional[str] = None
+    section: Optional[str] = None
+    aisle: Optional[str] = None
+    rack_number: Optional[str] = None
     price: float
     stock: int
     low_stock_threshold: int
-    image_url: Optional[str]
-    created_at: datetime
-    updated_at: datetime
+    image_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -79,6 +100,10 @@ class NearbyStoreResponse(BaseModel):
     price: float
     distance_km: Optional[float] = None
     last_updated: str
+    floor: Optional[str] = None
+    section: Optional[str] = None
+    aisle: Optional[str] = None
+    rack_number: Optional[str] = None
 
 
 class ProductNearbyResponse(BaseModel):
@@ -90,10 +115,55 @@ class MasterCatalogResponse(BaseModel):
     id: str
     name: str
     category: str
+    brand: Optional[str] = None
+    size: Optional[str] = None
+    available_sizes: Optional[str] = None
+    floor: Optional[str] = None
+    section: Optional[str] = None
+    aisle: Optional[str] = None
+    rack_number: Optional[str] = None
     suggested_price: float
     barcode: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class LocationMetadata(BaseModel):
+    store_id: str
+    store_name: str
+    address: Optional[str] = None
+    floor: Optional[str] = None
+    section: Optional[str] = None
+    aisle: Optional[str] = None
+    rack_number: Optional[str] = None
+    last_updated: str = "Today"
+
+
+class SizeRecommendation(BaseModel):
+    recommended_size: Optional[str] = None
+    available_sizes: List[str] = []
+    unavailable_sizes: List[str] = []
+    size_matched_user_profile: bool = False
+    size_chart: Optional[dict] = None
+
+
+class CheckoutPreview(BaseModel):
+    status: str = "COMING_NEXT"
+    label: str = "Checkout & Payment — Coming Next"
+    description: str = "Production payment gateway and checkout workflow ready for activation."
+
+
+class InstantFindResponse(BaseModel):
+    status: str
+    match_type: str = "NONE"
+    match_label: str = "No match"
+    confidence: float = 0.0
+    product: Optional[ProductResponse] = None
+    location: Optional[LocationMetadata] = None
+    size_recommendation: Optional[SizeRecommendation] = None
+    alternatives: List[NearbyStoreResponse] = []
+    checkout_preview: CheckoutPreview = Field(default_factory=CheckoutPreview)
+
 
 
 

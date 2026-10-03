@@ -7,7 +7,9 @@ import com.google.gson.annotations.SerializedName
 data class YoloDetection(
     val label: String,
     val confidence: Float,
-    val bbox: List<Float>   // [x1, y1, x2, y2] normalised 0-1
+    val bbox: List<Float>,   // [x1, y1, x2, y2] normalised 0-1
+    @SerializedName("class_name") val className: String? = null,
+    @SerializedName("product_match") val productMatch: ProductResponse? = null
 )
 
 data class YoloDetectResponse(

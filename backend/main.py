@@ -24,6 +24,17 @@ def run_migrations():
                 conn.commit()
             except Exception:
                 pass
+        for col in ["brand", "size", "available_sizes", "floor", "section", "aisle", "rack_number"]:
+            try:
+                conn.execute(text(f"ALTER TABLE products ADD COLUMN {col} VARCHAR"))
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                conn.execute(text(f"ALTER TABLE master_catalog ADD COLUMN {col} VARCHAR"))
+                conn.commit()
+            except Exception:
+                pass
         try:
             conn.execute(text("UPDATE bills SET customer_name = 'Abhradeep Das' WHERE customer_name IS NULL OR customer_name = ''"))
             conn.execute(text("UPDATE bills SET customer_phone = '+91 98301 24510' WHERE customer_phone IS NULL OR customer_phone = ''"))

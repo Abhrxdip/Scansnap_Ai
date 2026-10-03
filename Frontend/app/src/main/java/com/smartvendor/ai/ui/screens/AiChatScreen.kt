@@ -42,11 +42,14 @@ fun AiChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     var inputText by remember { mutableStateOf("") }
 
-    val quickSuggestions = listOf(
-        "🍜 Is Maggi available?",
-        "🔍 Where else can I find Maggi?",
-        "🥛 What is the price of Amul milk?",
-        "🍪 Show me biscuits"
+    data class CopilotAction(val label: String, val prompt: String)
+    val copilotActions = listOf(
+        CopilotAction("📸 Find This", "Find this product in inventory"),
+        CopilotAction("📍 Find Nearby", "Find nearby stores with stock"),
+        CopilotAction("💰 Cheapest", "Find cheapest price across all stores"),
+        CopilotAction("👕 Find My Size", "Find my size for clothing and footwear"),
+        CopilotAction("🗺 Where Is It?", "Where is it located? Show floor and rack"),
+        CopilotAction("🛒 Optimize Basket", "Optimize my basket across stores for best price")
     )
 
     Scaffold(
@@ -151,15 +154,14 @@ fun AiChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Quick Suggestion Chips Carousel
+            // One-Tap ScanSnap Copilot Actions
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(quickSuggestions) { suggestion ->
-                    val cleanText = suggestion.substringAfter(" ")
+                items(copilotActions) { action ->
                     Box(
                         modifier = Modifier
                             .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
@@ -167,13 +169,13 @@ fun AiChatScreen(
                             .background(NeuSurface)
                             .border(BorderStroke(1.5.dp, NeuBlack), RoundedCornerShape(8.dp))
                             .clickable {
-                                viewModel.sendMessage(cleanText)
+                                viewModel.sendMessage(action.prompt)
                             }
                             .padding(horizontal = 12.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = suggestion,
-                            fontWeight = FontWeight.Bold,
+                            text = action.label,
+                            fontWeight = FontWeight.Black,
                             fontSize = 12.sp,
                             color = NeuBlack
                         )

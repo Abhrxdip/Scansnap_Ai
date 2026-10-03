@@ -315,10 +315,15 @@ fun ScanScreen(
                                     product = product,
                                     detectedBitmap = uiState.detectedBitmap,
                                     selectedQuantity = uiState.selectedQuantity,
+                                    selectedSize = uiState.selectedProductSize,
+                                    onSelectSize = { viewModel.selectProductSize(it) },
                                     onIncrease = { viewModel.increaseQuantity() },
                                     onDecrease = { viewModel.decreaseQuantity() },
                                     onAdd = { viewModel.addProductToBill() },
-                                    onCancel = { viewModel.cancelDetection() }
+                                    onCancel = { viewModel.cancelDetection() },
+                                    onWhereIsIt = { viewModel.openWhereIsItDialog() },
+                                    onFindElsewhere = { viewModel.openFindElsewhereDialog() },
+                                    onCheckoutPreview = { viewModel.openPaymentComingNextDialog() }
                                 )
                             }
                         }
@@ -500,6 +505,28 @@ fun ScanScreen(
                     }
                 )
             }
+
+            if (uiState.showWhereIsItDialog && uiState.detectedProduct != null) {
+                WhereIsItDialog(
+                    product = uiState.detectedProduct!!,
+                    onDismiss = { viewModel.dismissWhereIsItDialog() }
+                )
+            }
+
+            if (uiState.showFindElsewhereDialog && uiState.detectedProduct != null) {
+                FindElsewhereDialog(
+                    product = uiState.detectedProduct!!,
+                    alternatives = uiState.nearbyAlternatives,
+                    onDismiss = { viewModel.dismissFindElsewhereDialog() }
+                )
+            }
+
+            if (uiState.showPaymentComingNextDialog) {
+                PaymentComingNextDialog(
+                    product = uiState.detectedProduct,
+                    onDismiss = { viewModel.dismissPaymentComingNextDialog() }
+                )
+            }
         }
     }
 }
@@ -602,10 +629,15 @@ fun DetectedProductCard(
     product: Product,
     detectedBitmap: Bitmap? = null,
     selectedQuantity: Int,
+    selectedSize: String = "M",
+    onSelectSize: (String) -> Unit = {},
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
     onAdd: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onWhereIsIt: () -> Unit = {},
+    onFindElsewhere: () -> Unit = {},
+    onCheckoutPreview: () -> Unit = {}
 ) {
     NeuCard(
         backgroundColor = NeuSurface,
@@ -613,9 +645,10 @@ fun DetectedProductCard(
         cornerRadius = 16.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // 1. Header: Image, Product Name, Category/Brand, Price
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -626,7 +659,7 @@ fun DetectedProductCard(
                         bitmap = detectedBitmap.asImageBitmap(),
                         contentDescription = product.name,
                         modifier = Modifier
-                            .size(62.dp)
+                            .size(60.dp)
                             .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(8.dp)),
@@ -638,45 +671,172 @@ fun DetectedProductCard(
                     Text(
                         text = product.name,
                         fontWeight = FontWeight.Black,
-                        fontSize = 17.sp,
+                        fontSize = 16.sp,
                         color = NeuBlack,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Category: ${product.category}",
+                        text = "Category: ${product.category}${if (product.brand.isNotBlank()) " • ${product.brand}" else ""}",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         color = NeuGray
                     )
                 }
                 Text(
-                    text = "₹${"%.2f".format(product.price)}",
+                    text = "₹${"%.0f".format(product.price)}",
                     fontWeight = FontWeight.Black,
                     fontSize = 20.sp,
                     color = NeuBlue
                 )
             }
 
+            // 2. Store & Availability Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(
+                    text = "🏬 ${product.storeName.ifBlank { "ABC Mall / Central Store" }}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = NeuBlack
+                )
+
                 NeuBadge(
-                    text = if (product.stock > 0) "IN STOCK (${product.stock})" else "OUT OF STOCK",
+                    text = if (product.stock > 0) "AVAILABLE (${product.stock})" else "OUT OF STOCK",
                     backgroundColor = if (product.stock > 0) NeuGreen else NeuRed,
                     textColor = if (product.stock > 0) NeuBlack else NeuWhite,
                     shadowOffset = 2.dp
                 )
+            }
 
+            // 3. Exact Retailer Location Metadata (Floor, Section, Rack)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(NeuSurface)
+                    .border(BorderStroke(1.5.dp, NeuBlack), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📍 ${product.floor.ifBlank { "1st Floor" }}",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp,
+                        color = NeuBlack
+                    )
+                    Text(
+                        text = "👕 ${product.section.ifBlank { "Fashion Section" }}",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp,
+                        color = NeuBlack
+                    )
+                    Text(
+                        text = "🗄 Rack ${product.rackNumber.ifBlank { "A-12" }}",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp,
+                        color = NeuBlack
+                    )
+                }
+            }
+
+            // 4. Clothing / Footwear Size Selector
+            if (product.availableSizes.isNotBlank()) {
+                val sizesList = product.availableSizes.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Size (Recommended: $selectedSize):",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp,
+                            color = NeuBlack
+                        )
+                        Text(
+                            text = "Profile remembered",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = NeuBlue
+                        )
+                    }
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(sizesList) { sizeToken ->
+                            val isSelected = sizeToken.equals(selectedSize, ignoreCase = true)
+                            val isAvailable = !sizeToken.endsWith("✗") && !sizeToken.contains("out", ignoreCase = true)
+                            val displayText = if (isAvailable) "$sizeToken ✓" else "$sizeToken ✗"
+                            Box(
+                                modifier = Modifier
+                                    .neuShadow(if (isSelected) 3.dp else 1.dp, if (isSelected) 3.dp else 1.dp, NeuBlack, 6.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) NeuYellow else if (isAvailable) NeuSurface else NeuGray.copy(alpha = 0.3f))
+                                    .border(BorderStroke(if (isSelected) 2.dp else 1.5.dp, NeuBlack), RoundedCornerShape(6.dp))
+                                    .clickable(enabled = isAvailable) { onSelectSize(sizeToken) }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = displayText,
+                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = if (isAvailable) NeuBlack else NeuGray
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Action Buttons: Where Is It & Find Elsewhere
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                NeuButton(
+                    text = "🗺 WHERE IS IT?",
+                    onClick = onWhereIsIt,
+                    backgroundColor = NeuBlue,
+                    textColor = NeuWhite,
+                    modifier = Modifier.weight(1f),
+                    shadowOffset = 2.5.dp,
+                    cornerRadius = 8.dp
+                )
+                NeuButton(
+                    text = "🏬 FIND ELSEWHERE",
+                    onClick = onFindElsewhere,
+                    backgroundColor = NeuSurface,
+                    textColor = NeuBlack,
+                    modifier = Modifier.weight(1.2f),
+                    shadowOffset = 2.5.dp,
+                    cornerRadius = 8.dp
+                )
+            }
+
+            // 6. Quantity, Stock & Add to Bill Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(30.dp)
                             .neuShadow(2.dp, 2.dp, NeuBlack, 6.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(NeuSurface)
@@ -684,19 +844,19 @@ fun DetectedProductCard(
                             .clickable(enabled = selectedQuantity > 1) { onDecrease() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = NeuBlack, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = NeuBlack, modifier = Modifier.size(14.dp))
                     }
 
                     Text(
                         text = "$selectedQuantity",
                         fontWeight = FontWeight.Black,
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         color = NeuBlack
                     )
 
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(30.dp)
                             .neuShadow(2.dp, 2.dp, NeuBlack, 6.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(NeuYellow)
@@ -704,45 +864,336 @@ fun DetectedProductCard(
                             .clickable { onIncrease() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Increase", tint = NeuBlack, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Add, contentDescription = "Increase", tint = NeuBlack, modifier = Modifier.size(14.dp))
                     }
                 }
-            }
 
-            if (selectedQuantity > product.stock) {
-                NeuBadge(
-                    text = "⚠️ Exceeds app stock (${product.stock} listed) — billing allowed",
-                    backgroundColor = NeuYellow,
-                    textColor = NeuBlack,
-                    shadowOffset = 2.dp
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
                 NeuButton(
                     text = "Cancel",
                     onClick = onCancel,
                     backgroundColor = NeuSurface,
                     textColor = NeuBlack,
-                    modifier = Modifier.weight(1f),
-                    shadowOffset = 3.dp,
-                    cornerRadius = 10.dp
+                    modifier = Modifier.weight(0.8f),
+                    shadowOffset = 2.5.dp,
+                    cornerRadius = 8.dp
                 )
                 NeuButton(
                     text = "➕ Add to Bill",
                     onClick = onAdd,
                     backgroundColor = NeuYellow,
                     textColor = NeuBlack,
-                    modifier = Modifier.weight(1.3f),
-                    shadowOffset = 3.dp,
-                    cornerRadius = 10.dp
+                    modifier = Modifier.weight(1.2f),
+                    shadowOffset = 2.5.dp,
+                    cornerRadius = 8.dp
                 )
             }
+
+            // 7. Payment Extension Point CTA (Coming Next)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .neuShadow(2.dp, 2.dp, NeuBlack, 8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(NeuBlack)
+                    .border(BorderStroke(1.5.dp, NeuBlack), RoundedCornerShape(8.dp))
+                    .clickable { onCheckoutPreview() }
+                    .padding(vertical = 7.dp, horizontal = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "💳 Checkout & Payment — Coming Next",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp,
+                    color = NeuYellow
+                )
+            }
+
+            Text(
+                text = "Inventory updated: Today, 10:32 AM",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = NeuGray,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
         }
     }
+}
+
+@Composable
+fun WhereIsItDialog(
+    product: Product,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            NeuButton(
+                text = "Got It 👍",
+                onClick = onDismiss,
+                backgroundColor = NeuYellow,
+                textColor = NeuBlack,
+                shadowOffset = 2.dp,
+                cornerRadius = 8.dp
+            )
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = "🗺 Exact Shelf Location", fontWeight = FontWeight.Black, fontSize = 18.sp, color = NeuBlack)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = product.name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = NeuBlack
+                )
+                Text(
+                    text = "Store: ${product.storeName.ifBlank { "ABC Central Mall" }}",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = NeuGray
+                )
+                HorizontalDivider(color = NeuBlack.copy(alpha = 0.2f), thickness = 1.dp)
+
+                // Location Badges
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    LocationBadgeItem("📍 Floor", product.floor.ifBlank { "1st Floor" }, NeuBlue, NeuWhite, Modifier.weight(1f))
+                    LocationBadgeItem("👕 Section", product.section.ifBlank { "Fashion" }, NeuGreen, NeuBlack, Modifier.weight(1f))
+                    LocationBadgeItem("🗄 Rack", product.rackNumber.ifBlank { "A-12" }, NeuYellow, NeuBlack, Modifier.weight(1f))
+                }
+
+                if (product.aisle.isNotBlank()) {
+                    Text(
+                        text = "🚶 Walking Aisle: ${product.aisle}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = NeuBlack
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(NeuSurface)
+                        .border(BorderStroke(1.5.dp, NeuBlack), RoundedCornerShape(8.dp))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = "Direction Guide:\nTake the central escalator to the ${product.floor.ifBlank { "1st Floor" }}. Walk towards the ${product.section.ifBlank { "Fashion Section" }}. Rack ${product.rackNumber.ifBlank { "A-12" }} is located on the right row facing Aisle ${product.aisle.ifBlank { "3" }}.",
+                        fontSize = 12.sp,
+                        color = NeuBlack,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        },
+        containerColor = NeuSurface,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(16.dp))
+    )
+}
+
+@Composable
+fun LocationBadgeItem(
+    label: String,
+    value: String,
+    bg: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .neuShadow(2.dp, 2.dp, NeuBlack, 6.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg)
+            .border(BorderStroke(1.5.dp, NeuBlack), RoundedCornerShape(6.dp))
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = textColor)
+            Text(text = value, fontSize = 11.sp, fontWeight = FontWeight.Black, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+fun FindElsewhereDialog(
+    product: Product,
+    alternatives: List<com.smartvendor.ai.network.models.NearbyStoreProduct>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            NeuButton(
+                text = "Close",
+                onClick = onDismiss,
+                backgroundColor = NeuSurface,
+                textColor = NeuBlack,
+                shadowOffset = 2.dp,
+                cornerRadius = 8.dp
+            )
+        },
+        title = {
+            Text(text = "🏬 Available at Partner Stores", fontWeight = FontWeight.Black, fontSize = 18.sp, color = NeuBlack)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Live stock & rack locations for \"${product.name}\":",
+                    fontSize = 13.sp,
+                    color = NeuGray,
+                    fontWeight = FontWeight.Medium
+                )
+
+                if (alternatives.isEmpty()) {
+                    Text(
+                        text = "No partner stores currently have verified stock for this item.",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NeuRed
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        alternatives.forEach { alt ->
+                            NeuCard(
+                                backgroundColor = NeuSurface,
+                                shadowOffset = 2.dp,
+                                cornerRadius = 10.dp
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = alt.storeName,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 14.sp,
+                                            color = NeuBlack
+                                        )
+                                        Text(
+                                            text = "₹${"%.0f".format(alt.price)}",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 14.sp,
+                                            color = NeuBlue
+                                        )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "📍 ${alt.distanceKm ?: 0.5} km • ${alt.stock} in stock",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NeuGreen
+                                        )
+                                    }
+                                    if (!alt.floor.isNullOrBlank() || !alt.rackNumber.isNullOrBlank()) {
+                                        Text(
+                                            text = "🏢 ${alt.floor.orEmpty()}, ${alt.section.orEmpty()} | Rack: ${alt.rackNumber.orEmpty()}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = NeuBlack
+                                        )
+                                    }
+                                    if (!alt.storeAddress.isNullOrBlank()) {
+                                        Text(
+                                            text = alt.storeAddress.orEmpty(),
+                                            fontSize = 10.sp,
+                                            color = NeuGray,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        containerColor = NeuSurface,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(16.dp))
+    )
+}
+
+@Composable
+fun PaymentComingNextDialog(
+    product: Product?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            NeuButton(
+                text = "Understood 👍",
+                onClick = onDismiss,
+                backgroundColor = NeuYellow,
+                textColor = NeuBlack,
+                shadowOffset = 2.dp,
+                cornerRadius = 8.dp
+            )
+        },
+        title = {
+            Text(text = "💳 Checkout & Payment", fontWeight = FontWeight.Black, fontSize = 18.sp, color = NeuBlack)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                NeuBadge(
+                    text = "COMING NEXT IN PHASE 2",
+                    backgroundColor = NeuYellow,
+                    textColor = NeuBlack,
+                    shadowOffset = 2.dp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "ScanSnap Instant Self-Checkout Architecture:",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 13.sp,
+                    color = NeuBlack
+                )
+                Text(
+                    text = "1. Digital Cart & Order Locking ✓\n" +
+                           "2. In-Store UPI / Card / POS Gateway (Coming Next)\n" +
+                           "3. Instant Exit QR Gate Pass & E-Receipt Delivery",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp,
+                    color = NeuBlack,
+                    lineHeight = 18.sp
+                )
+                if (product != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(NeuSurface)
+                            .border(BorderStroke(1.5.dp, NeuBlack), RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = "Item ready for instant order: ${product.name} (₹${"%.0f".format(product.price)})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = NeuBlack
+                        )
+                    }
+                }
+            }
+        },
+        containerColor = NeuSurface,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.border(BorderStroke(2.dp, NeuBlack), RoundedCornerShape(16.dp))
+    )
 }
 
 @Composable

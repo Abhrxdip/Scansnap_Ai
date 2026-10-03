@@ -51,15 +51,40 @@ data class ProductResponse(
     val id: String,
     @SerializedName("user_id") val userId: String,
     val name: String,
-    val barcode: String?,
+    val barcode: String? = null,
     val category: String,
+    val brand: String? = null,
+    val size: String? = null,
+    @SerializedName("available_sizes") val availableSizes: String? = null,
+    val floor: String? = null,
+    val section: String? = null,
+    val aisle: String? = null,
+    @SerializedName("rack_number") val rackNumber: String? = null,
     val price: Double,
     val stock: Int,
-    @SerializedName("low_stock_threshold") val lowStockThreshold: Int,
-    @SerializedName("image_url") val imageUrl: String?,
-    @SerializedName("created_at") val createdAt: String,
-    @SerializedName("updated_at") val updatedAt: String
-)
+    @SerializedName("low_stock_threshold") val lowStockThreshold: Int = 5,
+    @SerializedName("image_url") val imageUrl: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null
+) {
+    fun toDomain(): com.smartvendor.ai.model.Product = com.smartvendor.ai.model.Product(
+        id = id,
+        name = name,
+        barcode = barcode ?: "",
+        category = category,
+        price = price,
+        stock = stock,
+        lowStockThreshold = lowStockThreshold,
+        imageUrl = imageUrl ?: "",
+        brand = brand ?: "",
+        size = size ?: "",
+        availableSizes = availableSizes ?: "",
+        floor = floor ?: "",
+        section = section ?: "",
+        aisle = aisle ?: "",
+        rackNumber = rackNumber ?: ""
+    )
+}
 
 // ─── Bill ──────────────────────────────────────────────────────────────────────
 
@@ -163,7 +188,48 @@ data class NearbyStoreProduct(
     val price: Double,
     val stock: Int,
     @SerializedName("distance_km") val distanceKm: Double? = null,
-    @SerializedName("time_ago") val timeAgo: String = ""
+    @SerializedName("time_ago") val timeAgo: String = "",
+    val floor: String? = null,
+    val section: String? = null,
+    val aisle: String? = null,
+    @SerializedName("rack_number") val rackNumber: String? = null,
+    val size: String? = null
+)
+
+data class LocationMetadataResponse(
+    @SerializedName("store_id") val storeId: String = "demo_user",
+    @SerializedName("store_name") val storeName: String = "ScanSnap Express Kirana",
+    val address: String? = "",
+    val floor: String? = "Ground Floor",
+    val section: String? = "Retail Section",
+    val aisle: String? = "Aisle 1",
+    @SerializedName("rack_number") val rackNumber: String? = "Rack A-01",
+    @SerializedName("last_updated") val lastUpdated: String? = "Today"
+)
+
+data class SizeRecommendationResponse(
+    @SerializedName("recommended_size") val recommendedSize: String? = null,
+    @SerializedName("available_sizes") val availableSizes: List<String> = emptyList(),
+    @SerializedName("unavailable_sizes") val unavailableSizes: List<String> = emptyList(),
+    @SerializedName("size_matched_user_profile") val sizeMatchedUserProfile: Boolean = false
+)
+
+data class CheckoutPreviewResponse(
+    val status: String = "COMING_NEXT",
+    val label: String = "Checkout & Payment — Coming Next",
+    val description: String = "Production payment gateway and checkout workflow ready for activation."
+)
+
+data class InstantFindResponse(
+    val status: String,
+    @SerializedName("match_type") val matchType: String,
+    @SerializedName("match_label") val matchLabel: String,
+    val confidence: Double,
+    val product: ProductResponse,
+    val location: LocationMetadataResponse,
+    @SerializedName("size_recommendation") val sizeRecommendation: SizeRecommendationResponse? = null,
+    val alternatives: List<NearbyStoreProduct> = emptyList(),
+    @SerializedName("checkout_preview") val checkoutPreview: CheckoutPreviewResponse? = null
 )
 
 data class AiChatRequest(

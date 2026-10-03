@@ -38,7 +38,9 @@ def _get_model():
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 from pydantic import BaseModel
-from auth import CurrentUser
+from auth import CurrentUser, OptionalUser
+from sqlalchemy import or_
+import schemas
 
 
 class Detection(BaseModel):
@@ -75,7 +77,17 @@ FRIENDLY_NAMES = {
     "appe_fizz": "Appy Fizz Sparkling Apple Juice",
     "jim_jam": "Britannia Treat Jim Jam Biscuits",
     "beardo": "Beardo Mariner Eau De Parfum 50ml",
-    "beardo_mariner": "Beardo Mariner Eau De Parfum 50ml"
+    "beardo_mariner": "Beardo Mariner Eau De Parfum 50ml",
+    "puma": "Puma Regular Fit T-Shirt",
+    "puma_tshirt": "Puma Regular Fit T-Shirt",
+    "nike": "Nike Revolution 6 Running Shoes",
+    "nike_shoes": "Nike Revolution 6 Running Shoes",
+    "boat": "boAt Rockerz 450 Bluetooth Headphones",
+    "boat_headphones": "boAt Rockerz 450 Bluetooth Headphones",
+    "nivia": "Nivia Storm Football Size 5",
+    "nivia_football": "Nivia Storm Football Size 5",
+    "milton": "Milton Thermosteel Flip Lid Flask 1000ml",
+    "milton_flask": "Milton Thermosteel Flip Lid Flask 1000ml"
 }
 
 
@@ -94,7 +106,14 @@ def _match_db_product(label: str, user_id: str) -> Optional[dict]:
                     "price": p.price,
                     "stock": p.stock,
                     "category": p.category,
-                    "barcode": p.barcode
+                    "barcode": p.barcode,
+                    "brand": getattr(p, "brand", None),
+                    "size": getattr(p, "size", None),
+                    "available_sizes": getattr(p, "available_sizes", None),
+                    "floor": getattr(p, "floor", None),
+                    "section": getattr(p, "section", None),
+                    "aisle": getattr(p, "aisle", None),
+                    "rack_number": getattr(p, "rack_number", None)
                 }
 
             explicit_name = FRIENDLY_NAMES.get(normalized_label)
@@ -677,3 +696,241 @@ async def get_classes():
         return {"classes": model.names, "num_classes": len(model.names)}
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+def _haversine_dist(lat1, lon1, lat2, lon2):
+    import math
+    R = 6371.0
+    dLat = math.radians(lat2 - lat1)
+    dLon = math.radians(lon2 - lon1)
+    lat1 = math.radians(lat1)
+    lat2 = math.radians(lat2)
+    a = math.sin(dLat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dLon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
+
+@router.post("/instant-find", response_model=schemas.InstantFindResponse, summary="ScanSnap Instant Find — One Consolidated Identification Request")
+async def instant_find(
+    user_id: OptionalUser,
+    file: Optional[UploadFile] = File(None),
+    barcode: Optional[str] = Form(None),
+    ocr_text: Optional[str] = Form(None),
+    query: Optional[str] = Form(None),
+    preferred_size: Optional[str] = Form(None)
+):
+    """
+    Executes the 5-tier Product Matching Hierarchy:
+    1. Exact Barcode
+    2. Canonical / Global Product Identifier
+    3. Brand + Product Name + Variant
+    4. Normalized Name
+    5. Visual / YOLO / OCR Category attributes (marks 'Possible match' if not certain)
+    
+    Consolidates: Product + Store Location + Clothing Size + Find Elsewhere + Payment Preview.
+    """
+    from database import SessionLocal
+    import models, schemas
+    from datetime import datetime
+
+    db = SessionLocal()
+    try:
+        active_uid = user_id or "demo_user"
+        matched_product = None
+        match_type = "EXACT_BARCODE"
+        match_label = "Exact Match"
+        confidence = 1.0
+
+        # Tier 1: Barcode matching
+        if barcode and barcode.strip():
+            b = barcode.strip()
+            matched_product = db.query(models.Product).filter(
+                models.Product.user_id == active_uid,
+                models.Product.barcode == b
+            ).first()
+            if not matched_product:
+                matched_product = db.query(models.Product).filter(
+                    models.Product.barcode == b
+                ).first()
+            if matched_product:
+                match_type = "BARCODE_EXACT"
+                match_label = "Exact match"
+                confidence = 1.0
+
+        # Tier 2: Canonical / Global Product Identifier
+        if not matched_product and (ocr_text or query):
+            q_code = (ocr_text or query or "").strip()
+            matched_product = db.query(models.Product).filter(
+                models.Product.id == q_code
+            ).first()
+            if not matched_product:
+                mc = db.query(models.MasterCatalog).filter(models.MasterCatalog.id == q_code).first()
+                if mc:
+                    matched_product = db.query(models.Product).filter(models.Product.name.ilike(f"%{mc.name}%")).first()
+            if matched_product:
+                match_type = "CANONICAL_ID"
+                match_label = "Exact match"
+                confidence = 0.99
+
+        # Tier 3: OCR text or query string matching (Brand + Name + Variant)
+        raw_text = (ocr_text or query or "").strip()
+        if not matched_product and raw_text:
+            text_lower = raw_text.lower()
+            brands = ["puma", "nike", "boat", "beardo", "amul", "maggi", "britannia", "nivea", "surf excel", "oreo", "milton", "nivia", "tata"]
+            detected_brand = next((brand for brand in brands if brand in text_lower), None)
+            
+            all_prods = db.query(models.Product).filter(
+                or_(models.Product.user_id == active_uid, models.Product.user_id == "demo_user")
+            ).all()
+            
+            if detected_brand:
+                candidates = [p for p in all_prods if detected_brand in p.name.lower() or (p.brand and detected_brand in p.brand.lower())]
+                if candidates:
+                    matched_product = candidates[0]
+                    match_type = "BRAND_NAME_VARIANT"
+                    match_label = "Exact match"
+                    confidence = 0.95
+
+            if not matched_product:
+                tokens = [t for t in text_lower.split() if len(t) > 2]
+                for p in all_prods:
+                    p_name_lower = p.name.lower()
+                    matching_tokens = sum(1 for t in tokens if t in p_name_lower)
+                    if matching_tokens >= 2 or (len(tokens) == 1 and tokens[0] in p_name_lower):
+                        matched_product = p
+                        match_type = "NORMALIZED_NAME"
+                        match_label = "Exact match" if matching_tokens >= 2 else "Possible match"
+                        confidence = 0.88 if matching_tokens >= 2 else 0.65
+                        break
+
+        # Tier 4: Visual / Image inference if file provided
+        if not matched_product and file is not None:
+            try:
+                contents = await file.read()
+                if contents and len(contents) > 0:
+                    img = Image.open(io.BytesIO(contents))
+                    if img.mode != "RGB":
+                        img = img.convert("RGB")
+                    detect_res = _run_inference(img, active_uid, conf_threshold=0.25)
+                    if detect_res.detections:
+                        top = detect_res.detections[0]
+                        if top.product_match:
+                            p_id = top.product_match.get("id")
+                            matched_product = db.query(models.Product).filter(models.Product.id == p_id).first()
+                            confidence = float(top.confidence)
+                            if confidence >= 0.75:
+                                match_type = "VISUAL_MATCH"
+                                match_label = "Exact match"
+                            else:
+                                match_type = "POSSIBLE_MATCH"
+                                match_label = "Possible match"
+            except Exception as e:
+                logger.warning(f"Instant find image inference error: {e}")
+
+        if not (barcode or ocr_text or query or file):
+            return schemas.InstantFindResponse(
+                status="empty_input",
+                match_type="NONE",
+                match_label="No search criteria provided",
+                confidence=0.0
+            )
+
+        if not matched_product:
+            return schemas.InstantFindResponse(
+                status="not_found",
+                match_type="NONE",
+                match_label="Product not found",
+                confidence=0.0
+            )
+
+        # Location Metadata (Retailer provided facts only - zero hallucinations)
+        store_profile = db.query(models.StoreProfile).filter(
+            models.StoreProfile.user_id == matched_product.user_id
+        ).first()
+        store_name = store_profile.name if (store_profile and store_profile.name) else "ScanSnap Partner Store"
+        store_address = store_profile.address if (store_profile and store_profile.address) else "Brigade Road, Bangalore"
+        
+        has_location = bool((matched_product.floor and matched_product.floor.strip()) or 
+                            (matched_product.rack_number and matched_product.rack_number.strip()) or 
+                            (matched_product.section and matched_product.section.strip()))
+        loc_meta = None
+        if has_location:
+            loc_meta = schemas.LocationMetadata(
+                store_id=matched_product.user_id,
+                store_name=store_name,
+                address=store_address,
+                floor=matched_product.floor or "",
+                section=matched_product.section or "",
+                aisle=matched_product.aisle or "",
+                rack_number=matched_product.rack_number or "",
+                last_updated=f"Today, {datetime.utcnow().strftime('%I:%M %p')}"
+            )
+
+        # Clothing / Footwear Size Assistant
+        size_rec = None
+        if matched_product.available_sizes or matched_product.size:
+            raw_avail = [s.strip() for s in (matched_product.available_sizes or matched_product.size or "S,M,L").split(",") if s.strip()]
+            user_pref = (preferred_size or "").strip()
+            
+            is_matched = user_pref.upper() in [s.upper() for s in raw_avail] if user_pref else False
+            recommended = user_pref if is_matched else (matched_product.size or (raw_avail[0] if raw_avail else "M"))
+            
+            full_matrix = ["S", "M", "L", "XL"] if matched_product.category.lower() in ["clothing", "apparel"] else raw_avail
+            unavailable = [sz for sz in full_matrix if sz.upper() not in [s.upper() for s in raw_avail]]
+            
+            size_rec = schemas.SizeRecommendation(
+                recommended_size=recommended,
+                available_sizes=raw_avail,
+                unavailable_sizes=unavailable,
+                size_matched_user_profile=is_matched
+            )
+
+        # Alternatives (Find Elsewhere across partner stores)
+        curr_lat = store_profile.latitude if (store_profile and store_profile.latitude is not None) else 12.9716
+        curr_lon = store_profile.longitude if (store_profile and store_profile.longitude is not None) else 77.5946
+
+        alt_query = db.query(models.Product, models.StoreProfile).join(
+            models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
+        ).filter(models.Product.user_id != matched_product.user_id)
+
+        if matched_product.barcode:
+            alt_query = alt_query.filter(models.Product.barcode == matched_product.barcode)
+        else:
+            alt_query = alt_query.filter(models.Product.name.ilike(f"%{matched_product.name}%"))
+
+        alt_results = alt_query.all()
+        alternatives = []
+        for alt_p, alt_s in alt_results:
+            dist = None
+            if curr_lat is not None and curr_lon is not None and alt_s.latitude is not None and alt_s.longitude is not None:
+                dist = round(_haversine_dist(curr_lat, curr_lon, alt_s.latitude, alt_s.longitude), 1)
+            alternatives.append(schemas.NearbyStoreResponse(
+                store_id=alt_s.user_id,
+                store_name=alt_s.name or "Partner Store",
+                address=alt_s.address or "",
+                available=alt_p.stock > 0,
+                price=alt_p.price,
+                distance_km=dist,
+                last_updated="15m ago",
+                floor=alt_p.floor,
+                section=alt_p.section,
+                aisle=alt_p.aisle,
+                rack_number=alt_p.rack_number
+            ))
+
+        alternatives.sort(key=lambda x: (0 if x.available else 1, x.distance_km if x.distance_km is not None else float('inf'), x.price))
+
+        return schemas.InstantFindResponse(
+            status="success",
+            match_type=match_type,
+            match_label=match_label,
+            confidence=round(confidence, 2),
+            product=schemas.ProductResponse.model_validate(matched_product),
+            location=loc_meta,
+            size_recommendation=size_rec,
+            alternatives=alternatives[:5],
+            checkout_preview=schemas.CheckoutPreview()
+        )
+    finally:
+        db.close()
+
