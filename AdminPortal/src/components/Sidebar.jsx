@@ -9,12 +9,14 @@ import {
   Radio, 
   ChevronRight,
   TrendingUp,
-  Tag
+  Tag,
+  ShieldAlert
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
   const menuItems = [
     { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard, badge: 'Live' },
+    { id: 'loss-prevention', label: 'Loss Prevention', icon: ShieldAlert, badge: 'Shield 7' },
     { id: 'inventory', label: 'Master Inventory', icon: Package },
     { id: 'bills', label: 'Invoice Archive', icon: Receipt },
     { id: 'offers', label: 'Festivals & Combos', icon: Tag, badge: 'Smart AI' },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import DashboardPage from './pages/DashboardPage';
@@ -7,17 +7,51 @@ import BillsPage from './pages/BillsPage';
 import AiStudioPage from './pages/AiStudioPage';
 import SettingsPage from './pages/SettingsPage';
 import OffersPage from './pages/OffersPage';
+import LossPreventionShield from './components/LossPreventionShield';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const getInitialTab = () => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.replace('#', '').toLowerCase();
+      if (['loss-prevention', 'prevention', 'shrink'].includes(hash)) return 'loss-prevention';
+      if (['ai-studio', 'vision'].includes(hash)) return 'ai-studio';
+      if (['inventory', 'bills', 'offers', 'settings'].includes(hash)) return hash;
+    }
+    return 'dashboard';
+  };
+
+  const [activeTab, setActiveTabState] = useState(getInitialTab);
   const [selectedBill, setSelectedBill] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      window.location.hash = tab;
+    }
+  };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '').toLowerCase();
+      if (['loss-prevention', 'prevention', 'shrink'].includes(hash)) setActiveTabState('loss-prevention');
+      else if (['dashboard', 'inventory', 'bills', 'offers', 'ai-studio', 'settings'].includes(hash)) {
+        setActiveTabState(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Tab configurations
   const tabTitles = {
     dashboard: {
       title: 'Store Command Center',
       subtitle: 'Real-time sales velocity, revenue metrics, and inventory alerts',
+    },
+    'loss-prevention': {
+      title: 'Retail Loss Prevention & Shrink Shield',
+      subtitle: 'Real-time CCTV lane audits, ticket-switching defense & automated POS fraud detection',
     },
     inventory: {
       title: 'Master Inventory Studio',
@@ -74,6 +108,10 @@ export default function App() {
               setActiveTab={setActiveTab} 
               onSelectBill={handleSelectBill} 
             />
+          )}
+
+          {activeTab === 'loss-prevention' && (
+            <LossPreventionShield />
           )}
 
           {activeTab === 'inventory' && (

@@ -3,17 +3,36 @@
 const DIRECT_BACKEND = 'https://scansnapai-production.up.railway.app';
 
 export async function apiFetch(endpoint, options = {}) {
-  try {
-    const res = await fetch(`${DIRECT_BACKEND}${endpoint}`, options);
-    return res;
-  } catch (err) {
-    // Transparent local fallback
+  const isLocal = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname.startsWith('192.168.')
+  );
+
+  const targets = isLocal
+    ? ['/api', 'http://127.0.0.1:8000', DIRECT_BACKEND]
+    : [DIRECT_BACKEND, '/api', 'http://127.0.0.1:8000'];
+
+  let lastRes = null;
+  for (const base of targets) {
     try {
-      return await fetch(`/api${endpoint}`, options);
-    } catch {
-      return fetch(`http://127.0.0.1:8000${endpoint}`, options);
+      const url = base.startsWith('http') ? `${base}${endpoint}` : `${base}${endpoint}`;
+      const res = await fetch(url, options);
+      if (res.ok) {
+        return res;
+      }
+      lastRes = res;
+      // If 404, 502, 503, attempt next target in fallback sequence
+      if (res.status === 404 || res.status >= 500) {
+        continue;
+      }
+      return res;
+    } catch (err) {
+      // Continue to next fallback
     }
   }
+
+  return lastRes || fetch(`/api${endpoint}`, options);
 }
 
 export async function fetchAnalytics() {
