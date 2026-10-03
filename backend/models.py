@@ -94,3 +94,21 @@ class MasterCatalog(Base):
     aisle = Column(String, nullable=True)
     rack_number = Column(String, nullable=True)
 
+
+class LossPreventionIncident(Base):
+    __tablename__ = "loss_prevention_incidents"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    lane_id = Column(String, default="Lane-01")
+    scenario_type = Column(String, nullable=False)
+    risk_level = Column(String, nullable=False, default="MEDIUM")
+    risk_score = Column(Float, nullable=False, default=50.0)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    scanned_product_name = Column(String, nullable=True)
+    detected_product_name = Column(String, nullable=True)
+    price_discrepancy = Column(Float, default=0.0)
+    recommended_action = Column(String, default="ALERT_STAFF")
+    status = Column(String, default="PENDING_REVIEW")
+    created_at = Column(DateTime, default=datetime.utcnow)
+

@@ -163,6 +163,7 @@ class InstantFindResponse(BaseModel):
     size_recommendation: Optional[SizeRecommendation] = None
     alternatives: List[NearbyStoreResponse] = []
     checkout_preview: CheckoutPreview = Field(default_factory=CheckoutPreview)
+    loss_prevention_alert: Optional[dict] = None
 
 
 

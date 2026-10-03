@@ -151,3 +151,36 @@ export async function seedDemoBills() {
   return res.json();
 }
 
+// ─── Loss Prevention & Shrink Shield Client ─────────────────────────────────
+
+export async function fetchLossPreventionStats() {
+  const res = await apiFetch('/loss-prevention/stats');
+  if (!res.ok) throw new Error('Failed to fetch loss prevention stats');
+  return res.json();
+}
+
+export async function fetchLossPreventionIncidents(limit = 20) {
+  const res = await apiFetch(`/loss-prevention/incidents?limit=${limit}`);
+  if (!res.ok) throw new Error('Failed to fetch loss prevention incidents');
+  return res.json();
+}
+
+export async function simulateLossPreventionScenario(scenarioId) {
+  const res = await apiFetch(`/loss-prevention/simulate/${scenarioId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) throw new Error(`Simulation failed: ${scenarioId}`);
+  return res.json();
+}
+
+export async function resolveLossPreventionIncident(incidentId, action = 'confirm', note = '') {
+  const res = await apiFetch(`/loss-prevention/resolve/${incidentId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, note })
+  });
+  if (!res.ok) throw new Error('Failed to resolve incident');
+  return res.json();
+}
+

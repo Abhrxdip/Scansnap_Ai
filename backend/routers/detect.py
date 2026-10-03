@@ -717,7 +717,8 @@ async def instant_find(
     barcode: Optional[str] = Form(None),
     ocr_text: Optional[str] = Form(None),
     query: Optional[str] = Form(None),
-    preferred_size: Optional[str] = Form(None)
+    preferred_size: Optional[str] = Form(None),
+    scanned_barcode: Optional[str] = Form(None)
 ):
     """
     Executes the 5-tier Product Matching Hierarchy:
@@ -920,6 +921,22 @@ async def instant_find(
 
         alternatives.sort(key=lambda x: (0 if x.available else 1, x.distance_km if x.distance_km is not None else float('inf'), x.price))
 
+        # Check Loss Prevention if scanned_barcode provided
+        lp_alert = None
+        if scanned_barcode and matched_product:
+            try:
+                from services import loss_prevention_service
+                lp_alert = loss_prevention_service.evaluate_scan_for_shrinkage(
+                    scanned_barcode=scanned_barcode,
+                    detected_product_name=matched_product.name,
+                    detected_category=matched_product.category,
+                    detected_price=matched_product.price,
+                    detected_confidence=confidence,
+                    lane_id="Lane-01"
+                )
+            except Exception as e:
+                logger.error(f"Loss prevention check error: {e}")
+
         return schemas.InstantFindResponse(
             status="success",
             match_type=match_type,
@@ -929,7 +946,8 @@ async def instant_find(
             location=loc_meta,
             size_recommendation=size_rec,
             alternatives=alternatives[:5],
-            checkout_preview=schemas.CheckoutPreview()
+            checkout_preview=schemas.CheckoutPreview(),
+            loss_prevention_alert=lp_alert
         )
     finally:
         db.close()

@@ -1,0 +1,365 @@
+services:
+  model-downloader:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.downloader
+      args:
+        - HTTP_PROXY=${HTTP_PROXY}
+        - HTTPS_PROXY=${HTTPS_PROXY}
+    image: intel/model-downloader:${LP_TAG}
+    container_name: model-downloader-lp
+    environment:
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - http_proxy=${http_proxy}
+      - https_proxy=${https_proxy}
+      - NO_PROXY=${NO_PROXY}
+      - no_proxy=rabbitmq,minio-service,model-downloader,rtsp-streamer,localhost,127.0.0.1
+      - LOCAL_UID=${LOCAL_UID}
+      - LOCAL_GID=${LOCAL_GID}
+      - MODELS_DIR=/workspace/models
+      - WORKLOAD_DIST=${WORKLOAD_DIST:-workload_to_pipeline.json}
+      - MODEL_NAME=${MODEL_NAME}
+      - PRECISION=${PRECISION}
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - ../models:/workspace/models
+      - ../configs:/workspace/configs
+      - ../results:/workspace/results
+    command: [ "/bin/bash", "-c", "/workspace/scripts/model-downloader.sh" ]
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672" # AMQP port
+      - "15672:15672" # Management UI port
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "status" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - my_network
+
+  minio-service:
+    image: chainguard/minio@sha256:cb84dfa704c648c4b14858aa288576bb1cf756a9b326112a0934db00e87d0bb8
+    ports:
+      - "${MINIO_API_HOST_PORT}:80"
+      - "${MINIO_CONSOLE_HOST_PORT}:81"
+    environment:
+      no_proxy: ${no_proxy},localhost
+      http_proxy: ${http_proxy}
+      https_proxy: ${https_proxy}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_API_HOST_PORT: ${MINIO_API_HOST_PORT}
+      MINIO_CONSOLE_HOST_PORT: ${MINIO_CONSOLE_HOST_PORT}
+      LP_IP: ${LP_IP}
+    command: |
+      server /data 
+      --address ":80"
+      --console-address ":81"
+    healthcheck:
+      test: [ "CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/80 && printf 'GET /minio/health/live HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && read -r line <&3 && case \"$$line\" in *200*) exit 0 ;; *) exit 1 ;; esac" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    volumes:
+      - "minio_data:/data"
+    networks:
+      - my_network
+
+  rtsp-streamer:
+    container_name: rtsp-streamer
+    build:
+      context: ./rtsp-streamer
+      dockerfile: Dockerfile
+      args:
+        - HTTP_PROXY=${HTTP_PROXY}
+        - HTTPS_PROXY=${HTTPS_PROXY}
+        - http_proxy=${http_proxy}
+        - https_proxy=${https_proxy}
+    image: intel/rtsp-streamer:${LP_TAG}
+    restart: unless-stopped
+    environment:
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - http_proxy=${http_proxy}
+      - https_proxy=${https_proxy}
+      - NO_PROXY=${NO_PROXY}
+      - RTSP_PORT=${RTSP_PORT:-8554}
+      - STREAM_LOOP=${STREAM_LOOP:-true}
+    volumes:
+      - ${RTSP_MEDIA_DIR:-../performance-tools/sample-media}:/media:ro
+    networks:
+      - my_network
+
+  ovms-vlm:
+    image: ${OVMS_IMAGE:-openvino/model_server:2026.3.1-gpu}
+    container_name: ovms-vlm
+    group_add:
+      - video
+      - ${RENDER_GROUP_ID:-1002}
+    environment:
+      - OV_CACHE_DIR=/tmp/ov_cache
+      - LOG_LEVEL=INFO
+      - VLM_WORKLOAD_ENABLED=${LP_VLM_WORKLOAD_ENABLED}
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - http_proxy=${http_proxy}
+      - https_proxy=${https_proxy}
+      - no_proxy=rabbitmq,minio-service,model-downloader,rtsp-streamer,ovms-vlm,localhost,127.0.0.1
+      - NO_PROXY=rabbitmq,minio-service,model-downloader,rtsp-streamer,ovms-vlm,localhost,127.0.0.1
+    volumes:
+      - ../models/ovms-model:/models:ro
+      - ${OVMS_CACHE_DIR:-../models/ovms-cache}:/tmp/ov_cache
+    ports:
+      - "${OVMS_HOST_PORT:-8002}:8000"
+    # Non-VLM workloads (e.g. ASC) never download an OVMS model, so
+    # /models/config.json does not exist. Idle in that case, otherwise services
+    # depending on this one with `condition: service_healthy` abort the whole
+    # `docker compose up`. When VLM *is* enabled a missing config is a real
+    # failure, so fail fast rather than idling silently.
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
+      - |
+        if [ "$${VLM_WORKLOAD_ENABLED}" != "1" ]; then
+          echo "[INFO] VLM workload not enabled for this run - OVMS idling"
+          exec tail -f /dev/null
+        fi
+        if [ ! -f /models/config.json ]; then
+          echo "[ERROR] VLM workload enabled but /models/config.json not found - exiting"
+          exit 1
+        fi
+        # Replicated from the upstream image entrypoint, which this override replaces.
+        if [ -d /ovms/share/espeak-ng-data ]; then
+          export ESPEAK_DATA_PATH=/ovms/share/espeak-ng-data
+        fi
+        exec /ovms/bin/ovms --config_path /models/config.json --rest_port 8000
+    devices:
+      - /dev/dri:/dev/dri
+    healthcheck:
+      test: [ "CMD-SHELL", "if [ \"$${VLM_WORKLOAD_ENABLED}\" != \"1\" ]; then exit 0; fi; [ -f /models/config.json ] || exit 1; curl -sf http://localhost:8000/v1/config | grep -q AVAILABLE" ]
+      interval: 10s
+      timeout: 10s
+      retries: 100
+      start_period: 45s
+    networks:
+      - my_network
+    depends_on:
+      model-downloader:
+        condition: service_completed_successfully
+
+  # --- main services ---
+  lp-vlm-workload-handler:
+    container_name: lp-vlm-workload-handler
+    build:
+      context: ../lp-vlm/src
+      dockerfile: Dockerfile.consumer
+      args:
+        - HTTP_PROXY=${HTTP_PROXY}
+        - HTTPS_PROXY=${HTTPS_PROXY}
+    image: intel/lp-vlm-workload-handler:${LP_TAG}
+    #user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - ${USER_GROUP_ID:-1000}
+      - ${VIDEO_GROUP_ID:-44}
+      - ${RENDER_GROUP_ID:-1002}
+    environment:
+      - VLM_WORKLOAD_ENABLED=${LP_VLM_WORKLOAD_ENABLED}
+      - VLM_BACKEND=${VLM_BACKEND:-ovms}
+      - OVMS_ENDPOINT=${OVMS_ENDPOINT:-http://ovms-vlm:8000}
+      - OVMS_MODEL_NAME=${OVMS_MODEL_NAME:-Qwen/Qwen2.5-VL-7B-Instruct}
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - http_proxy=${http_proxy}
+      - https_proxy=${https_proxy}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - LP_IP=${LP_IP}
+      - LP_BASE_DIR=${LP_BASE_DIR}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_MANAGEMENT_PORT=15672
+      - no_proxy=rabbitmq,minio-service,model-downloader,rtsp-streamer,ovms-vlm,localhost,127.0.0.1
+      - NO_PROXY=rabbitmq,minio-service,model-downloader,rtsp-streamer,ovms-vlm,localhost,127.0.0.1
+      - AMQP_NOTE=Use nc rabbitmq 5672 (curl is not valid for AMQP)
+      - CONTAINER_RESULTS_PATH=${CONTAINER_RESULTS_PATH:-/app/results}
+      - WORKLOAD_DIST=${WORKLOAD_DIST:-workload_to_pipeline.json}
+      - CAMERA_STREAM=${CAMERA_STREAM:-camera_to_workload.json}
+      - RTSP_STREAM_HOST=${RTSP_STREAM_HOST:-rtsp-streamer}
+      - RTSP_STREAM_PORT=${RTSP_STREAM_PORT:-8554}
+      - GST_DEBUG="4"
+      - GST_TRACERS="latency_tracer(flags=pipeline)"
+    volumes:
+      - ../lp-vlm/src/utils:/app/utils
+      - ../lp-vlm/src/pipeline:/app/pipeline
+      - ../lp-vlm/src/config:/app/config
+      - ../lp-vlm/src/agent:/app/agent
+      - ../lp-vlm/src/main.py:/app/main.py
+      - ../lp-vlm/src/workload_utils.py:/app/workload_utils.py
+      - ${RESULTS_DIR:-../results/vlm-results}:/app/results
+      - ../configs:/app/lp/configs
+      - ../vlm_loss_prevention.log:/app/loss_prevention_app.log
+    networks:
+      - my_network
+    env_file:
+      - ../lp-vlm/src/.env
+    depends_on:
+      rtsp-streamer:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-service:
+        condition: service_healthy
+      model-downloader:
+        condition: service_completed_successfully
+      ovms-vlm:
+        condition: service_healthy
+
+  vlm-pipeline-runner:
+    container_name: vlm-pipeline-runner
+    image: intel/pipeline-runner-lp:${LP_TAG}
+    #user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    shm_size: '512m'
+    ulimits:
+      stack:
+        soft: 67108864
+        hard: 67108864
+    environment:
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - http_proxy=${http_proxy}
+      - https_proxy=${https_proxy}
+      - VLM_WORKLOAD_ENABLED=${LP_VLM_WORKLOAD_ENABLED}
+      - ROI_COORDINATES=${ROI_COORDINATES}
+      - LP_IP=${LP_IP}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - THRESHOLD=${THRESHOLD:-16}
+      - DISPLAY=${DISPLAY:-:0}
+      - RENDER_MODE=${RENDER_MODE:-0}
+      - DETECTION_THRESHOLD=${DETECTION_THRESHOLD}
+      - LP_BASE_DIR=${LP_BASE_DIR}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_MANAGEMENT_PORT=15672
+      - no_proxy=rabbitmq,minio-service,model-downloader,rtsp-streamer,localhost,127.0.0.1
+      - NO_PROXY=rabbitmq,minio-service,model-downloader,rtsp-streamer,localhost,127.0.0.1
+      - AMQP_NOTE=Use nc rabbitmq 5672 (curl is not valid for AMQP)
+      - CAMERA_STREAM=${CAMERA_STREAM:-camera_to_workload.json}
+      - WORKLOAD_DIST=${WORKLOAD_DIST:-workload_to_pipeline.json}
+      - BATCH_SIZE_DETECT=${BATCH_SIZE_DETECT:-1}
+      - BATCH_SIZE_CLASSIFY=${BATCH_SIZE_CLASSIFY:-1}
+      - INFERENCE_INTERVAL=${INFERENCE_INTERVAL:-3}
+      - RTSP_STREAM_HOST=${RTSP_STREAM_HOST:-rtsp-streamer}
+      - RTSP_STREAM_PORT=${RTSP_STREAM_PORT:-8554}
+      - CONTAINER_NAME=${CONTAINER_NAME:-gst}
+    volumes:
+      - ../lp-vlm/src/pipeline/publish.py:/home/pipeline-server/lp-vlm/gvapython/publish.py
+      - ../lp-vlm/src/pipeline/send_end_message.py:/home/pipeline-server/lp-vlm/gvapython/send_end_message.py
+      - ../lp-vlm/src/pipeline/config.py:/home/pipeline-server/lp-vlm/gvapython/config.py
+      - ../lp-vlm/src/utils/save_results.py:/home/pipeline-server/lp-vlm/save_results.py
+      - ../lp-vlm/src/workload_utils.py:/home/pipeline-server/lp-vlm/workload_utils.py
+      - ../models:/home/pipeline-server/lp-vlm/models
+      - ../configs:/home/pipeline-server/lp-vlm/configs
+      - ../performance-tools/sample-media:/home/pipeline-server/lp-vlm/sample-media
+      - ${RESULTS_DIR:-../results/vlm-results}:/app/results
+      - /dev:/dev
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    networks:
+      - my_network
+    privileged: true
+    depends_on:
+      rtsp-streamer:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-service:
+        condition: service_healthy
+      model-downloader:
+        condition: service_completed_successfully
+      lp-vlm-workload-handler:
+        condition: service_started
+
+  lp-pipeline-runner:
+    #container_name: lp-pipeline-runner
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.pipeline
+      args:
+        - HTTP_PROXY=${HTTP_PROXY}
+        - HTTPS_PROXY=${HTTPS_PROXY}
+    image: intel/pipeline-runner-lp:${LP_TAG}
+    #user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    shm_size: '512m'
+    ipc: host
+    ulimits:
+      stack:
+        soft: 67108864
+        hard: 67108864
+    depends_on:
+      model-downloader:
+        condition: service_completed_successfully
+    environment:
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - http_proxy=${http_proxy}
+      - https_proxy=${https_proxy}
+      - VLM_WORKLOAD_ENABLED=0
+      - VIDEO_NAME=${VIDEO_NAME}
+      - LP_IP=${LP_IP}
+      - ROI_COORDINATES=${ROI_COORDINATES}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - THRESHOLD=${THRESHOLD:-7}
+      - LP_BASE_DIR=${LP_BASE_DIR}
+      - DISPLAY=${DISPLAY:-:0}
+      - RENDER_MODE=${RENDER_MODE:-0}
+      - CONTAINER_NAME=${CONTAINER_NAME:-gst}
+      - CAMERA_STREAM=${CAMERA_STREAM:-camera_to_workload.json}
+      - WORKLOAD_DIST=${WORKLOAD_DIST:-workload_to_pipeline.json}
+      - BATCH_SIZE_DETECT=${BATCH_SIZE_DETECT:-1}
+      - BATCH_SIZE_CLASSIFY=${BATCH_SIZE_CLASSIFY:-1}
+      - INFERENCE_INTERVAL=${INFERENCE_INTERVAL:-3}
+      - RTSP_STREAM_HOST=${RTSP_STREAM_HOST:-rtsp-streamer}
+      - RTSP_STREAM_PORT=${RTSP_STREAM_PORT:-8554}
+      - NO_PROXY=localhost,127.0.0.0/8,10.0.0.0/24,*.intel.com,192.168.0.0/16,10.223.23.127,172.25.0.0/16,rtsp-streamer
+      - no_proxy=localhost,127.0.0.0/8,10.0.0.0/24,*.intel.com,192.168.0.0/16,10.223.23.127,172.25.0.0/16,rtsp-streamer
+      - PIPELINE_COUNT=${PIPELINE_COUNT:-1}
+      - GST_DEBUG=GST_TRACER:7,gvafpscounter:4
+      - GST_TRACERS=latency_tracer(flags=pipeline)
+      - ROUND_ROBIN_COUNT=4
+
+    volumes:
+      - ../models:/home/pipeline-server/models
+      - ../performance-tools/sample-media:/home/pipeline-server/sample-media
+      - ${RESULTS_DIR:-../results}:/home/pipeline-server/results
+      - ../configs:/home/pipeline-server/configs
+      - ../src/pipelines:/home/pipeline-server/pipelines
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    networks:
+      - my_network
+    privileged: true
+
+volumes:
+  minio_data:
+    driver: local
+networks:
+  my_network:
+    driver: bridge

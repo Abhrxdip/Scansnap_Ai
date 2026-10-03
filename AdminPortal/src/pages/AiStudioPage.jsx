@@ -27,10 +27,12 @@ import {
   Zap,
   ExternalLink,
   Cpu,
-  Workflow
+  Workflow,
+  ShieldAlert
 } from 'lucide-react';
 import { detectObjectsInImage } from '../api/client';
 import BarcodeCard from '../components/BarcodeCard';
+import LossPreventionShield from '../components/LossPreventionShield';
 
 const BOX_COLORS = [
   '#10B981', // Emerald
@@ -873,6 +875,17 @@ export default function AiStudioPage() {
             className={`neu-btn neu-btn-sm ${activeTab === 'classes' ? 'neu-btn-purple' : ''}`}
           >
             <Layers size={13} /> Model Classes ({trainedClasses.length})
+          </button>
+          <button 
+            onClick={() => setActiveTab('prevention')}
+            className={`neu-btn neu-btn-sm ${activeTab === 'prevention' ? 'neu-btn-purple' : ''}`}
+            style={{
+              background: activeTab === 'prevention' ? '#EF4444' : undefined,
+              color: activeTab === 'prevention' ? '#FFF' : undefined,
+              borderColor: activeTab === 'prevention' ? '#DC2626' : undefined
+            }}
+          >
+            <ShieldAlert size={13} /> Loss Prevention Shield (7 Scenarios)
           </button>
         </div>
       </div>
@@ -1920,6 +1933,8 @@ export default function AiStudioPage() {
           </div>
         </div>
       )}
+
+      {activeTab === 'prevention' && <LossPreventionShield />}
 
       {/* Fullscreen Ultra Zoom & Detection Inspector Lightbox Modal */}
       {isFullscreenModal && (

@@ -1,0 +1,545 @@
+import os
+import json
+from pathlib import Path
+import copy
+from datetime import datetime
+from urllib.parse import urlparse
+from dotenv import dotenv_values
+import sys
+import socket
+import time
+
+WORKLOAD_DIST = os.environ.get("WORKLOAD_DIST", "workload_to_pipeline.json")
+CAMERA_STREAM = os.environ.get("CAMERA_STREAM", "camera_to_workload.json")
+CONFIG_CAMERA_TO_WORKLOAD = f"/home/pipeline-server/configs/{CAMERA_STREAM}"
+CONFIG_WORKLOAD_TO_PIPELINE = f"/home/pipeline-server/configs/{WORKLOAD_DIST}"
+
+
+MODELSERVER_DIR = "/home/pipeline-server"
+MODELSERVER_MODELS_DIR = "/home/pipeline-server/models"
+MODELSERVER_VIDEOS_DIR = "/home/pipeline-server/sample-media"
+RTSP_DEFAULT_HOST = os.getenv("RTSP_STREAM_HOST", "rtsp-streamer")
+RTSP_DEFAULT_PORT = os.getenv("RTSP_STREAM_PORT", "8554")
+RTSP_DEFAULT_LATENCY = os.getenv("RTSP_LATENCY", "300")
+
+# Configurable round robin count for model instance sharing
+try:
+    ROUND_ROBIN_COUNT = int(os.getenv("ROUND_ROBIN_COUNT", "4"))
+    if ROUND_ROBIN_COUNT < 1:
+        print(f"Warning: Invalid ROUND_ROBIN_COUNT value {ROUND_ROBIN_COUNT}, using default 4", file=sys.stderr)
+        ROUND_ROBIN_COUNT = 4
+except ValueError:
+    print(f"Warning: Invalid ROUND_ROBIN_COUNT value '{os.getenv('ROUND_ROBIN_COUNT')}', using default 4", file=sys.stderr)
+    ROUND_ROBIN_COUNT = 4
+
+
+def download_video_if_missing(video_name, width=None, fps=None):
+    # Use default width and fps if not provided
+    width = width if width is not None else 1920
+    fps = fps if fps is not None else 15
+    # Remove .mp4 extension if present for base name
+    base_name = video_name[:-4] if video_name.endswith('.mp4') else video_name
+    # Compose the expected file name
+    file_name = f"{base_name}-{width}-{fps}-bench.mp4"
+    video_path = os.path.join(MODELSERVER_VIDEOS_DIR, file_name)
+    return video_path
+
+
+def sanitize_gst_name(raw: str) -> str:
+    if not raw:
+        return "stream"
+    cleaned = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in raw)
+    if not cleaned:
+        cleaned = "stream"
+    if cleaned[0].isdigit():
+        cleaned = f"cam_{cleaned}"
+    return cleaned
+
+
+def check_rtsp_stream_exists(stream_uri: str, timeout: int = 3) -> bool:
+    """
+    Check if a specific RTSP stream path is available using GStreamer.
+    Returns True if the stream is accessible, False otherwise.
+    """
+    try:
+        import subprocess
+        
+        # Use gst-launch to test if stream exists with a very short timeout
+        # This will fail quickly if the stream doesn't exist (404 Not Found)
+        cmd = [
+            'timeout', '5',  # Kill after 5 seconds
+            'gst-launch-1.0',
+            'rtspsrc', f'location={stream_uri}',
+            'protocols=tcp',
+            'latency=500',
+            'timeout=5000000',  # 5 second RTSP timeout
+            '!', 'fakesink'
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=6,
+            text=True
+        )
+        
+        # Check if stderr contains "Not Found" or "404"
+        if result.stderr and ('Not Found' in result.stderr or '404' in result.stderr or 'Not found' in result.stderr):
+            return False
+            
+        # If command succeeded or timed out (stream exists but we didn't wait), it's available
+        return True
+        
+    except subprocess.TimeoutExpired:
+        # Timeout means stream connected successfully
+        return True
+    except Exception as e:
+        print(f"Warning: Could not check RTSP stream {stream_uri}: {e}", file=sys.stderr)
+        # If we can't check, assume it exists to avoid false negatives
+        return True
+
+
+def derive_stream_uri(camera: dict) -> str:
+    """
+    Derive the RTSP stream URI from the camera config.
+    Priority: streamUri (used as-is) > fileSrc (construct URI) > camera_id.
+    """
+    # First, check for explicit streamUri — use as-is
+    for key in ("streamUri", "stream_uri", "rtspUri", "rtsp_url"):
+        value = str(camera.get(key, ""))
+        cleaned = value.strip().strip('"').strip("'")
+        if cleaned:
+            if "://" in cleaned:
+                return cleaned
+            path = cleaned if cleaned.startswith("/") else f"/{cleaned}"
+            return f"rtsp://{RTSP_DEFAULT_HOST}:{RTSP_DEFAULT_PORT}{path}"
+
+    # Construct from fileSrc
+    file_src = str(camera.get("fileSrc", "")).split("|")[0].strip()
+    if file_src:
+        base_name = file_src[:-4] if file_src.endswith('.mp4') else file_src
+        width = camera.get("width", 1920)
+        fps = camera.get("fps", 15)
+        stream_path = f"{base_name}-{width}-{fps}-bench"
+        return f"rtsp://{RTSP_DEFAULT_HOST}:{RTSP_DEFAULT_PORT}/{stream_path}"
+
+    # Last resort: use camera_id
+    camera_id = str(camera.get("camera_id", "")).strip()
+    if camera_id:
+        return f"rtsp://{RTSP_DEFAULT_HOST}:{RTSP_DEFAULT_PORT}/{camera_id}"
+    return ""
+
+
+def derive_stream_name(camera: dict, stream_uri: str) -> str:
+    camera_id = str(camera.get("camera_id", "")).strip()
+    if camera_id:
+        return sanitize_gst_name(camera_id)
+
+    if stream_uri:
+        parsed = urlparse(stream_uri)
+        if parsed.path:
+            candidate = Path(parsed.path).name
+            if candidate:
+                return sanitize_gst_name(candidate)
+        if parsed.hostname:
+            return sanitize_gst_name(parsed.hostname)
+
+    file_src = str(camera.get("fileSrc", "")).split("|")[0].strip()
+    if file_src:
+        return sanitize_gst_name(Path(file_src).stem)
+
+    return "stream"
+
+def download_model_if_missing(model_name, model_type=None, precision=None):
+    if model_type == "gvadetect":
+        precision_lower = precision.lower()
+        return f"{MODELSERVER_MODELS_DIR}/object_detection/{model_name}/{precision}/{model_name}.xml"
+    elif model_type == "gvainference":
+        base_path = f"{MODELSERVER_MODELS_DIR}/object_classification/{model_name}"
+        model_path = f"{base_path}/{precision}/{model_name}.xml"
+        return model_path
+    elif model_type == "gvaclassify":
+        base_path = f"{MODELSERVER_MODELS_DIR}/object_classification/{model_name}"
+        model_path = f"{base_path}/{precision}/{model_name}.xml"
+        label_path = f"{base_path}/{model_name}.txt"
+        proc_path = f"{base_path}/{model_name}.json"
+        return model_path, label_path, proc_path
+    else:
+        # fallback
+        return os.path.join(MODELSERVER_MODELS_DIR, model_name)
+
+def load_json(path):
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Error: File not found: {path}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"Error: Failed to decode JSON in {path}: {e}")
+        return None
+    except Exception as e:
+        print(f"Error: Unexpected error reading {path}: {e}")
+        return None
+
+def pipeline_cfg_signature(cfg):
+    # Remove fields that don't affect pipeline structure (like device, ROI order doesn't matter)
+    sig = copy.deepcopy(cfg)
+    sig.pop('device', None)
+    sig.pop('region_of_interest', None)
+    return json.dumps(sig, sort_keys=True)
+
+def get_env_vars_for_device(device):
+    device_env_map = {
+        "CPU": "/res/all-cpu.env",
+        "NPU": "/res/all-npu.env",
+        "GPU": "/res/all-gpu.env"
+    }
+    env_file = device_env_map.get(device.upper())
+    if not env_file or not os.path.exists(env_file):
+        return {}
+    return dotenv_values(env_file)
+
+def build_gst_element(cfg):
+    model = cfg.get("model")
+    device = cfg.get("device")
+    precision = cfg.get("precision", "")
+    workload_name = cfg.get("workload_name")
+    camera_id = cfg.get("camera_id", "")
+    # Load env vars for this device
+    env_vars = get_env_vars_for_device(device) if device else {}
+    DECODE = env_vars.get("DECODE") or "decodebin"
+    PRE_PROCESS = env_vars.get("PRE_PROCESS", "")
+    DETECTION_OPTIONS = env_vars.get("DETECTION_OPTIONS", "")
+    PRE_PROCESS_CONFIG = env_vars.get("PRE_PROCESS_CONFIG", "")
+
+    try:
+        BATCH_SIZE_DETECT = int(os.environ.get("BATCH_SIZE_DETECT", 
+                                              env_vars.get("BATCH_SIZE_DETECT", 1)))
+    except ValueError:
+        print(f"Warning: Invalid BATCH_SIZE_DETECT value, using default 1", file=sys.stderr)
+        BATCH_SIZE_DETECT = 1
+        
+    try:
+        BATCH_SIZE_CLASSIFY = int(os.environ.get("BATCH_SIZE_CLASSIFY", 
+                                                env_vars.get("BATCH_SIZE_CLASSIFY", 1)))
+    except ValueError:
+        print(f"Warning: Invalid BATCH_SIZE_CLASSIFY value, using default 1", file=sys.stderr)
+        BATCH_SIZE_CLASSIFY = 1
+
+    try:
+        INFERENCE_INTERVAL = int(os.environ.get("INFERENCE_INTERVAL",
+                                                env_vars.get("INFERENCE_INTERVAL", 3)))
+        if INFERENCE_INTERVAL < 1:
+            print(f"Warning: Invalid INFERENCE_INTERVAL value {INFERENCE_INTERVAL}, using default 3", file=sys.stderr)
+            INFERENCE_INTERVAL = 3
+    except ValueError:
+        print(f"Warning: Invalid INFERENCE_INTERVAL value, using default 3", file=sys.stderr)
+        INFERENCE_INTERVAL = 3
+    
+    print("******************************************", file=sys.stderr)
+    print(f"DETECT {BATCH_SIZE_DETECT} - CLASSIFY {BATCH_SIZE_CLASSIFY} - INFERENCE_INTERVAL {INFERENCE_INTERVAL}", file=sys.stderr)
+    print("******************************************", file=sys.stderr)
+    
+    CLASSIFICATION_PRE_PROCESS = env_vars.get("CLASSIFICATION_PRE_PROCESS", "")
+    # Add inference-region=1 if region_of_interest is present in cfg (from camera_to_workload.json)
+    inference_region = ""
+    name_index = cfg.get("name_idx", "")  
+    name_str = f"name={camera_id}_{workload_name}_{name_index}" if workload_name and camera_id and cfg["type"] == "gvadetect" else ""
+    if cfg["type"] == "gvadetect" and cfg.get("region_of_interest") is not None:
+        inference_region = " inference-region=1"
+
+    if cfg["type"] == "gvadetect":
+        # Always use the precision from the current step config
+        model_path = download_model_if_missing(model, "gvadetect", cfg.get("precision", ""))
+        elem = f"gvadetect {name_str} batch-size={BATCH_SIZE_DETECT} inference-interval={INFERENCE_INTERVAL} scale-method=fast {inference_region} model={model_path} device={device} {PRE_PROCESS} {DETECTION_OPTIONS} {PRE_PROCESS_CONFIG}"
+    elif cfg["type"] == "gvaclassify":
+        # Always use the precision from the current step config
+        model_path, label_path, proc_path = download_model_if_missing(model, "gvaclassify", cfg.get("precision", ""))
+        labels_param = f"labels={label_path}" if os.path.exists(label_path) else ""
+        elem = f"gvaclassify {name_str} batch-size={BATCH_SIZE_CLASSIFY} inference-region=1 scale-method=fast model={model_path} device={device} {labels_param} model-proc={proc_path} {CLASSIFICATION_PRE_PROCESS}"
+    elif cfg["type"] == "gvainference":
+        model_path = download_model_if_missing(model, "gvainference", cfg.get("precision", ""))
+        elem = f"gvainference  model={model_path} device={device} "
+    elif cfg["type"] == "gvapython":
+        # Try to get module and function from cfg (populated from camera_to_workload.json)
+        module = cfg.get("module", "")
+        function = cfg.get("function", "")
+        elem = f"gvapython module=/home/pipeline-server/src/{module} class=PersonReID "
+    elif cfg["type"] in ["gvatrack", "gvaattachroi", "gvametaconvert", "gvametapublish", "gvawatermark", "gvafpscounter", "fpsdisplaysink", "queue", "videoconvert", "decodebin", "filesrc", "fakesink"]:
+        elem = cfg["type"]
+    else:
+        # Log warning but allow unknown types to pass through
+        print(f"Warning: Unknown or unsupported GStreamer element type: {cfg['type']}", file=sys.stderr)
+        elem = cfg["type"]
+    return elem, DECODE
+
+def build_dynamic_gstlaunch_command(camera, workloads, workload_map, branch_idx=0, model_instance_map=None, detect_counter=None, classify_counter=None, inference_counter=None, name_idx_counter=None, timestamp=None):
+    if model_instance_map is None:
+        model_instance_map = {}
+    if detect_counter is None:
+        detect_counter = [0]  # Use list for mutability in nested scope
+    if classify_counter is None:
+        classify_counter = [0]  # Use list for mutability in nested scope
+    if inference_counter is None:
+        inference_counter = [0]  # Use list for mutability in nested scope
+    if name_idx_counter is None:
+        name_idx_counter = [0]  # Use list for mutability in nested scope
+    # For each workload, build its steps and signature
+    workload_steps = []
+    workload_signatures = []
+    video_files = []
+    camera_id = camera.get("camera_id", f"cam{branch_idx+1}")
+    stream_uri = derive_stream_uri(camera)
+    source_name = derive_stream_name(camera, stream_uri)
+    signature_to_steps = {}
+    signature_to_source = {}
+    queue_params = "max-size-buffers=3 max-size-time=100000000 leaky=downstream"
+    for w in workloads:
+        if w in workload_map:
+            steps = []
+            for step in workload_map[w]:
+                roi = camera.get("region_of_interest")
+                step = step.copy()
+                if roi:
+                    step["region_of_interest"] = roi
+                # Add workload_name and camera_id to step for later use in gvadetect name
+                step["workload_name"] = w
+                step["camera_id"] = camera_id
+                steps.append(step)
+            # Normalize steps for signature (remove workload_name, camera_id)
+            norm_steps = []
+            for s in steps:
+                s_norm = s.copy()
+                s_norm.pop('workload_name', None)
+                s_norm.pop('camera_id', None)
+                norm_steps.append(s_norm)
+            # Build a unique signature that includes model and precision for all steps
+            # This ensures that if any step has a different model or precision, it will be a new stream
+            model_prec_signature = json.dumps([
+                {
+                    'type': s.get('type'),
+                    'model': s.get('model'),
+                    'precision': s.get('precision'),
+                    'device': s.get('device')
+                } for s in steps
+            ], sort_keys=True)
+            sig = model_prec_signature
+            if sig not in signature_to_steps:
+                signature_to_steps[sig] = steps
+                if stream_uri:
+                    signature_to_source[sig] = {
+                        "type": "rtsp",
+                        "uri": stream_uri,
+                        "name": source_name,
+                    }
+                else:
+                    file_src = str(camera.get("fileSrc", "")).split("|")[0].strip()
+                    width = camera.get("width", 1920)
+                    fps = camera.get("fps", 15)
+                    video_file = download_video_if_missing(file_src, width, fps)
+                    signature_to_source[sig] = {
+                        "type": "file",
+                        "path": video_file,
+                        "name": source_name,
+                    }
+    pipelines = []
+    for idx, (sig, steps) in enumerate(signature_to_steps.items()):
+        source_info = signature_to_source[sig]
+        # Get DECODE for the first step's device, if present
+        first_device = steps[0].get("device")
+        
+        # Determine if vapostproc should be used based on device type
+        vapostproc_elem = "vapostproc !" if first_device and first_device.upper() in ["NPU", "GPU"] else ""
+        
+        first_env_vars = get_env_vars_for_device(first_device) if first_device else {}
+        DECODE = (first_env_vars.get("DECODE") or "decodebin").strip()
+        if not DECODE:
+            DECODE = "decodebin"
+        if source_info.get("type") == "rtsp":
+            name_idx_counter[0] += 1
+            source_info["gst_name"] = f"{source_info['name']}_{name_idx_counter[0]}"
+            pipeline = (
+                f"rtspsrc name={source_info['gst_name']} location=\"{source_info['uri']}\" "
+                f"protocols=tcp latency={RTSP_DEFAULT_LATENCY} "
+                f"timeout=5000000 retry=3 drop-on-latency=true ! "
+                f"rtph264depay ! h264parse config-interval=-1 ! "
+                f"{DECODE} ! queue {queue_params}"
+            )
+        else:
+            pipeline = (
+                f"filesrc name={source_info['name']} location={source_info['path']} ! "
+                f"{DECODE} "
+            )
+        rois = []
+        seen_rois = set()
+        for step in steps:
+            roi = step.get("region_of_interest")
+            if roi:
+                roi_tuple = (roi.get('x', 0), roi.get('y', 0), roi.get('x2', 1), roi.get('y2', 1))
+                if roi_tuple not in seen_rois:
+                    seen_rois.add(roi_tuple)
+                    rois.append(roi)
+        if rois:
+            roi_strs = [f"roi={r['x']},{r['y']},{r['x2']},{r['y2']}" for r in rois]
+            gvaattachroi_elem = "gvaattachroi " + " ".join(roi_strs)
+            pipeline += f" ! {gvaattachroi_elem} ! queue {queue_params}"
+        # Only add gvaattachroi if region_of_interest is present (i.e., rois is not empty)
+        # Remove unconditional gvaattachroi for first inference step
+        inference_types = {"gvadetect", "gvaclassify", "gvainference"}
+        detect_count = 1
+        classify_count = 1
+        for i, step in enumerate(steps):
+            # Get env vars for each step's device, if present
+            step_env_vars = get_env_vars_for_device(step["device"]) if "device" in step else {}
+            if step["type"] == "gvadetect":
+                # Use round robin model instance sharing per device (configurable count)
+                step_device = step.get("device", "CPU").upper()
+                detect_counter.setdefault(step_device, 0)
+                model_instance_id = f"detect_shared_{step_device.lower()}{detect_counter[step_device] % ROUND_ROBIN_COUNT}"
+                detect_counter[step_device] += 1
+                name_idx_counter[0] += 1
+                step["name_idx"] = name_idx_counter[0]
+                elem, _ = build_gst_element(step)
+                elem = elem.replace("gvadetect", f"gvadetect model-instance-id={model_instance_id} threshold=0.5")
+                pipeline += f" ! {elem} ! gvatrack tracking-type=zero-term-imageless ! queue {queue_params}"
+                last_added_queue = True
+            elif step["type"] == "gvaclassify":
+                # Use round robin model instance sharing per device (configurable count)
+                step_device = step.get("device", "CPU").upper()
+                classify_counter.setdefault(step_device, 0)
+                model_instance_id = f"classify_shared_{step_device.lower()}{classify_counter[step_device] % ROUND_ROBIN_COUNT}"
+                classify_counter[step_device] += 1
+                elem, _ = build_gst_element(step)
+                elem = elem.replace("gvaclassify", f"gvaclassify model-instance-id={model_instance_id}")
+                pipeline += f" ! {elem}"
+                last_added_queue = False
+            elif step["type"] == "gvainference":
+                # Use round robin model instance sharing per device (configurable count)
+                step_device = step.get("device", "CPU").upper()
+                inference_counter.setdefault(step_device, 0)
+                model_instance_id = f"inference_shared_{step_device.lower()}{inference_counter[step_device] % ROUND_ROBIN_COUNT}"
+                inference_counter[step_device] += 1
+                elem, _ = build_gst_element(step)
+                elem = elem.replace("gvainference", f"gvainference model-instance-id={model_instance_id}")
+                pipeline += f" ! {elem} "    
+                last_added_queue = True
+            elif step["type"] == "gvapython":
+                elem, _ = build_gst_element(step)
+                stream_id = f"{source_info['gst_name']}"
+                elem = elem + f" arg='[\"{stream_id}\"]'"
+                pipeline += f" ! {elem} ! queue {queue_params}"
+                last_added_queue = False            
+            # Only add queue if not just added by gvadetect/gvatrack
+            if i < len(steps) - 1:
+                if not (step["type"] == "gvadetect"):
+                    pipeline += f" ! queue {queue_params}"
+        name_idx_counter[0] += 1
+        tee_name = f"t{branch_idx+1}_{idx+1}_{name_idx_counter[0]}"
+        stream_id = f"stream{branch_idx+1}_{idx+1}_{name_idx_counter[0]}"
+        has_gvapython = any(step.get("type") == "gvapython" for step in steps)
+        if not has_gvapython:
+            pipeline += f" ! gvametaconvert "
+            results_dir = "/home/pipeline-server/results"
+            out_file = f"{results_dir}/rs-{branch_idx+1}_{idx+1}__{name_idx_counter[0]}_{timestamp}.jsonl"
+            pipeline += f" ! gvametapublish file-format=json-lines file-path={out_file} ! gvafpscounter name={stream_id} "
+        else:
+            pipeline += f" ! queue {queue_params} ! gvafpscounter name={stream_id} "
+            #pipeline += f"    {tee_name}. ! queue ! gvafpscounter ! fakesink sync=false async=false "
+        render_mode = os.environ.get("RENDER_MODE", "0")
+        if render_mode == "1":
+            pipeline += f"  ! queue {queue_params} ! {vapostproc_elem} gvawatermark ! fpsdisplaysink video-sink=autovideosink sync=false text-overlay=true signal-fps-measurements=true"
+        else:
+            pipeline += f"  ! queue {queue_params} ! fpsdisplaysink video-sink=fakesink signal-fps-measurements=true"
+        pipelines.append(pipeline)
+    return pipelines
+
+def format_pipeline_multiline(pipeline):
+    # Split pipeline into elements
+    elems = [e.strip() for e in pipeline.split('!') if e.strip()]
+    formatted = []
+    for idx, elem in enumerate(elems):
+        is_first = idx == 0
+        indent = '' if is_first else '  '
+        if idx < len(elems) - 1:
+            line = f"{indent}{elem} ! \\"
+        else:
+            line = f"{indent}{elem}"
+        formatted.append(line)
+    return '\n'.join(formatted)
+
+def format_pipeline_branch(pipeline):
+    # Remove any trailing ! or whitespace
+    pipeline = pipeline.strip()
+    if pipeline.endswith('!'):
+        pipeline = pipeline[:-1].strip()
+    # Wrap in parentheses for GStreamer parallel branches
+    return f'({pipeline})'
+
+def main(num_of_pipelines=1):
+    # Ensure results directory exists at project root before running pipeline
+    results_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results"))
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Generate timestamp for all files
+    timestamp = os.environ.get("TIMESTAMP")
+  
+    camera_config = load_json(CONFIG_CAMERA_TO_WORKLOAD)
+    workload_map = load_json(CONFIG_WORKLOAD_TO_PIPELINE)["workload_pipeline_map"]
+    pipelines = []
+    model_instance_map = {}
+    detect_counter = {}  # per-device counters: {device: count}
+    classify_counter = {}  # per-device counters: {device: count}
+    inference_counter = {}  # per-device counters: {device: count}
+    name_idx_counter = [0]
+    
+    # Filter out cameras with lp_vlm workload and validate streams
+    cameras = camera_config["lane_config"]["cameras"]
+    filtered_cameras = []
+    
+    for cam in cameras:
+        workloads = cam.get("workloads", [])
+        # Support both list and single string
+        if isinstance(workloads, str):
+            workloads = [workloads]
+        
+        # Normalize workloads to lowercase for comparison
+        normalized_workloads = [str(w).strip().lower() for w in workloads]
+        
+        # Exclude camera if it has lp_vlm workload
+        if "lp_vlm" in normalized_workloads:
+            print(f"Skipping camera {cam.get('camera_id', 'unknown')} with lp_vlm workload", file=sys.stderr)
+            continue
+        
+        filtered_cameras.append(cam)
+    
+    # Process only filtered cameras
+    for pipeline_instance in range(num_of_pipelines):
+        for idx, cam in enumerate(filtered_cameras):
+            workloads = [w.lower() for w in cam["workloads"]]
+            norm_workload_map = {k.lower(): v for k, v in workload_map.items()}
+            cam_pipelines = build_dynamic_gstlaunch_command(cam, workloads, norm_workload_map, branch_idx=idx, model_instance_map=model_instance_map, detect_counter=detect_counter, classify_counter=classify_counter, inference_counter=inference_counter, name_idx_counter=name_idx_counter, timestamp=timestamp)
+            pipelines.extend([p.strip() for p in cam_pipelines])
+    # Print gst-launch-1.0 --verbose and all pipelines, each filesrc on a new line, with a backslash at the end except the last
+    gst_debug = os.getenv('GST_DEBUG', 'GST_TRACER:7,gvafpscounter:4')
+    gst_tracers = os.getenv('GST_TRACERS', 'latency_tracer(flags=pipeline)')
+    print(f"GST_DEBUG={gst_debug} GST_TRACERS=\"{gst_tracers}\" gst-launch-1.0 --verbose \\")
+    for idx, p in enumerate(pipelines):
+        end = " \\" if idx < len(pipelines) - 1 else ""
+        print(f"  {p}{end}")
+
+if __name__ == "__main__":
+    # Parse command line argument for number of pipelines
+    num_of_pipelines = 1  # Default value
+    if len(sys.argv) > 1:
+        try:
+            num_of_pipelines = int(sys.argv[1])
+            if num_of_pipelines < 1:
+                print(f"Warning: Invalid num_of_pipelines value {num_of_pipelines}, using default 1", file=sys.stderr)
+                num_of_pipelines = 1
+        except ValueError:
+            print(f"Warning: Invalid num_of_pipelines value '{sys.argv[1]}', using default 1", file=sys.stderr)
+            num_of_pipelines = 1
+    
+    main(num_of_pipelines)
