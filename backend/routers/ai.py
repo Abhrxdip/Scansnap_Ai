@@ -31,3 +31,12 @@ def ai_chat(
         success=True,
         response=result.get("response")
     )
+
+@router.get("/seed")
+def trigger_seed(db: Session = Depends(get_db)):
+    from seed_demo_data import seed
+    try:
+        seed(db=db)
+        return {"success": True, "message": "Demo stores and inventory successfully seeded!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

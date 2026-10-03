@@ -58,6 +58,7 @@ class TestInventoryChatService(unittest.TestCase):
         other_store = models.StoreProfile(user_id="store2", name="Super Bazaar", latitude=12.9780, longitude=77.5990)
         other_product = models.Product(id="p2", user_id="store2", name="Maggi Noodles 2-Minute", price=14.0, stock=20, updated_at=datetime.utcnow())
 
+        mock_db.query().outerjoin().filter().all.return_value = [(other_product, other_store)]
         mock_db.query().join().filter().all.return_value = [(other_product, other_store)]
 
         result = handle_chat_request("Where else can I find Maggi?", mock_db, "store1")

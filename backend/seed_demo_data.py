@@ -15,7 +15,7 @@ from database import engine, SessionLocal, Base
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-def seed():
+def seed(db=None):
     # 1. Ensure all tables and columns exist
     Base.metadata.create_all(bind=engine)
     with engine.connect() as conn:
@@ -26,7 +26,10 @@ def seed():
             except Exception:
                 pass
 
-    db = SessionLocal()
+    close_db = False
+    if db is None:
+        db = SessionLocal()
+        close_db = True
     
     try:
         print("[SEED] Seeding ScanSnap AI demo data...")
@@ -219,7 +222,8 @@ def seed():
 
 
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 if __name__ == "__main__":
     seed()

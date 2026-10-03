@@ -43,6 +43,11 @@ app = FastAPI(
 def startup_event():
     run_migrations()
     try:
+        from seed_demo_data import seed
+        seed()
+    except Exception as e:
+        print(f"Notice: Demo data seeding: {e}")
+    try:
         from routers.detect import _get_model
         _get_model()
     except Exception as e:

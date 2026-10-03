@@ -24,7 +24,8 @@ def extract_intent_and_entities(message: str):
     find_else_keywords = [
         "where else", "other store", "other stores", "another store",
         "nearby store", "nearby stores", "elsewhere", "where can i find",
-        "where can i get", "locate", "different store", "other shop", "find it"
+        "where can i get", "locate", "different store", "other shop", "find it",
+        "near me", "nearby", "anywhere else", "other places", "where to find"
     ]
     price_keywords = ["price", "cost", "how much", "rate"]
     avail_keywords = ["available", "availability", "have", "stock", "in stock", "got"]
@@ -34,13 +35,14 @@ def extract_intent_and_entities(message: str):
         "is", "the", "of", "do", "you", "have", "what", "are", "show", "me",
         "in", "this", "store", "stores", "shop", "shops", "can", "i", "where",
         "else", "elsewhere", "find", "it", "get", "locate", "tell", "about",
-        "any", "please", "check", "for", "at", "a", "an", "all", "some"
+        "any", "please", "check", "for", "at", "a", "an", "all", "some",
+        "near", "nearby", "anywhere", "places", "place"
     }
     
     cleaned = re.sub(r"[^\w\s]", " ", raw_message)
     words = cleaned.split()
     
-    excluded_keywords = set(find_else_keywords + price_keywords + avail_keywords + cat_keywords + ["other", "another", "nearby", "stores", "store", "shop"])
+    excluded_keywords = set(find_else_keywords + price_keywords + avail_keywords + cat_keywords + ["other", "another", "nearby", "stores", "store", "shop", "places", "near"])
     entities = [w for w in words if w not in stop_words and w not in excluded_keywords]
     extracted_name = " ".join(entities).strip()
     
@@ -68,6 +70,17 @@ def get_time_ago_str(updated_at: datetime) -> str:
     return "just now"
 
 def handle_chat_request(user_message: str, db: Session, store_id: str):
+    # Ensure demo partner stores exist in DB
+    try:
+        partner_exists = db.query(models.Product).filter(
+            models.Product.user_id.in_(["store_nearby_1", "store_nearby_2", "store_nearby_3"])
+        ).first()
+        if not partner_exists:
+            from seed_demo_data import seed
+            seed(db=db)
+    except Exception as e:
+        logger.warning(f"Demo auto-seed failed: {e}")
+
     parsed = extract_intent_and_entities(user_message)
     
     intent = parsed.get("intent", "UNKNOWN")
@@ -88,7 +101,7 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
         curr_lon = current_store.longitude if (current_store and current_store.longitude is not None) else 77.5946
 
         # Search other stores for this product name with stock > 0
-        alternatives = db.query(models.Product, models.StoreProfile).join(
+        alternatives = db.query(models.Product, models.StoreProfile).outerjoin(
             models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
         ).filter(
             models.Product.user_id != store_id,
@@ -100,7 +113,7 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
             terms = [t for t in product_name.split() if len(t) > 1]
             if terms:
                 filters = [models.Product.name.ilike(f"%{t}%") for t in terms]
-                alternatives = db.query(models.Product, models.StoreProfile).join(
+                alternatives = db.query(models.Product, models.StoreProfile).outerjoin(
                     models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
                 ).filter(
                     models.Product.user_id != store_id,
@@ -108,7 +121,7 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
                     *filters
                 ).all()
                 if not alternatives:
-                    alternatives = db.query(models.Product, models.StoreProfile).join(
+                    alternatives = db.query(models.Product, models.StoreProfile).outerjoin(
                         models.StoreProfile, models.Product.user_id == models.StoreProfile.user_id
                     ).filter(
                         models.Product.user_id != store_id,
@@ -123,7 +136,7 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
             results = []
             for p, store in alternatives:
                 dist = None
-                if curr_lat is not None and curr_lon is not None and store.latitude is not None and store.longitude is not None:
+                if curr_lat is not None and curr_lon is not None and store and store.latitude is not None and store.longitude is not None:
                     dist = haversine(curr_lat, curr_lon, store.latitude, store.longitude)
                 results.append({"store": store, "product": p, "dist": dist})
                 
@@ -134,7 +147,7 @@ def handle_chat_request(user_message: str, db: Session, store_id: str):
             for res in results:
                 dist_str = f"{res['dist']:.1f} km" if res['dist'] is not None else "Nearby"
                 time_ago = get_time_ago_str(res['product'].updated_at)
-                store_display_name = res['store'].name or "Nearby Partner Store"
+                store_display_name = res['store'].name if (res['store'] and res['store'].name) else "Nearby Partner Store"
                 response_lines.append(
                     f"• {store_display_name}: ₹{res['product'].price} | {dist_str} | Updated {time_ago}"
                 )
